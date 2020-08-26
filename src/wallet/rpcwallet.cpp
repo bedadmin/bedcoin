@@ -12,6 +12,7 @@
 #include <policy/feerate.h>
 #include <policy/fees.h>
 #include <policy/rbf.h>
+#include <policy/policy.h>
 #include <rpc/rawtransaction_util.h>
 #include <rpc/server.h>
 #include <rpc/util.h>
@@ -28,10 +29,12 @@
 #include <wallet/coincontrol.h>
 #include <wallet/feebumper.h>
 #include <wallet/rpcwallet.h>
+#include <wallet/fees.h>
 #include <wallet/wallet.h>
 #include <wallet/walletdb.h>
 #include <wallet/walletutil.h>
-
+#include <validation.h>
+#include <ticket.h>
 #include <stdint.h>
 
 #include <univalue.h>
@@ -4251,6 +4254,754 @@ UniValue walletcreatefundedpsbt(const JSONRPCRequest& request)
     return result;
 }
 
+static UniValue getaddresstickets(const JSONRPCRequest& request)
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    CWallet* const pwallet = wallet.get();
+
+    if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
+        return NullUniValue;
+    }
+
+    if (request.fHelp || request.params.size() > 4)
+        RPCHelpMan{"getaddresstickets",
+            "\nReturns array of unspent tickets\n"
+            "with between minconf and maxconf (inclusive) confirmations.\n"
+            "Optionally filter to only include txouts paid to specified addresses.\n",
+            {
+				{"address", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "address"},
+                {"all", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "wether show all firestone."},
+            },
+            RPCResult{
+                RPCResult::Type::ARR, "", "",
+                {
+                    {RPCResult::Type::STR, "outpoint", "xxx:xxx,	(string)the txid:vout"},
+                    {RPCResult::Type::STR, "address", "address,	    (string) the address"},
+                    {RPCResult::Type::NUM, "lockheight", "lockheight,(int) The height above which the tickets could be withdrawed"},
+                    {RPCResult::Type::BOOL, "state", /* optional */ false, "useable,	    whether the tickets can be withdrawed"},
+                }
+            },
+            RPCExamples{
+                HelpExampleCli("getaddresstickets", "\"1PGFqEzfmQch1gKD3ra4k18PNj3tTUUSqg\"")
+        + HelpExampleCli("getaddresstickets", "\"1PGFqEzfmQch1gKD3ra4k18PNj3tTUUSqg\" 6 9999999 true")
+            },
+        }.Check(request);
+
+	CTxDestination destination = DecodeDestination(request.params[0].get_str());
+	if (!IsValidDestination(destination)) {
+		throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid address");
+	}
+	if (destination.type() != typeid(PKHash)) {
+		throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Only support PUBKEYHASH");
+	}
+
+	// Make sure the results are valid at least up to the most recent block
+	// the user could have gotten from another RPC command prior to now
+    bool showAll = false;
+    if (!request.params[1].isNull()){
+        showAll = request.params[1].get_bool();
+    }
+	UniValue results(UniValue::VARR);
+    LOCK(cs_main);
+    CCoinsViewCache &coinsview = ::ChainstateActive().CoinsTip();
+    auto pkhash = boost::get<PKHash>(destination);
+	std::vector<CTicketRef> alltickets = pticketview->FindeTickets(CKeyID(pkhash));
+    std::vector<CTicketRef> tickets;
+    for(auto ticket : alltickets){
+        if (!coinsview.AccessCoin(COutPoint(ticket->out->hash, ticket->out->n)).IsSpent() || showAll){
+            tickets.push_back(ticket);
+        }
+    }
+
+	for (auto iter = tickets.begin();iter!=tickets.end();iter++){
+		UniValue entry(UniValue::VOBJ);
+        auto ticket = *iter;
+		int height = ticket->LockTime();
+		auto keyid = ticket->KeyID();
+        auto out = ticket->out;
+		uint256 tickethash = out->hash;
+		if (keyid.size() == 0 || height == 0)
+			continue;
+		std::string state;
+		switch (ticket->State(::ChainActive().Tip()->nHeight)){
+        case CTicket::CTicketState::IMMATURATE:
+			state="IMMATURATE";
+			break;
+		case CTicket::CTicketState::USEABLE:
+			state="USEABLE";
+			break;
+        case CTicket::CTicketState::OVERDUE:
+			state= "OVERDUE";
+			break;
+		case CTicket::CTicketState::UNKNOW:
+			state= "UNKNOW";
+			break;
+		}
+        entry.pushKV("outpoint", out->hash.ToString() + ":" + std::to_string(out->n));
+		entry.pushKV("address", EncodeDestination(PKHash(keyid)));
+		entry.pushKV("lockheight", height);
+		entry.pushKV("state",state);
+        entry.pushKV("isSpent", coinsview.AccessCoin(*out).IsSpent());
+		results.push_back(entry);
+	}
+
+    return results;
+}
+
+static UniValue listtickets(const JSONRPCRequest& request)
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    CWallet* const pwallet = wallet.get();
+
+    if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
+        return NullUniValue;
+    }
+
+        RPCHelpMan{"listtickets",
+        "\nReturns array of unspent firestone\n"
+        "with between minconf and maxconf (inclusive) confirmations.\n"
+        "Optionally filter to only include txouts paid to specified addresses.\n",
+        {
+            {"index", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "slot index."},
+            {"all", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "wether show all firestone."},
+        },
+        RPCResult{
+            RPCResult::Type::ARR, "", "",
+            {
+                {RPCResult::Type::STR, "outpoint", "xxx:xxx,	(string)the txid:vout"},
+                {RPCResult::Type::STR, "address", "address,	    (string) the address"},
+                {RPCResult::Type::NUM, "lockheight", "lockheight,(int) The height above which the tickets could be withdrawed"},
+                {RPCResult::Type::BOOL, "state", /* optional */ false, "useable,	    whether the tickets can be withdrawed"},
+            }
+        },
+        RPCExamples{
+            HelpExampleCli("listtickets", "")
+            + HelpExampleCli("listtickets", "10")
+            + HelpExampleCli("listtickets", "10 true")
+        },
+        }.Check(request);
+
+    LOCK(cs_main);
+    int slotIndex = pticketview->SlotIndex();
+    if (!request.params[0].isNull()){
+        slotIndex = request.params[0].get_int();
+    }
+    if (slotIndex < 0 || slotIndex > pticketview->SlotIndex()) {
+        throw JSONRPCError(RPC_TYPE_ERROR, "Invalid slot index");
+    }
+    
+    // Make sure the results are valid at least up to the most recent block
+    // the user could have gotten from another RPC command prior to now
+    bool showAll = false;
+    if (!request.params[1].isNull()){
+        showAll = request.params[1].get_bool();
+    }
+    UniValue results(UniValue::VARR);
+    
+    CCoinsViewCache &coinsview = ::ChainstateActive().CoinsTip();
+    std::vector<CTicketRef> alltickets = pticketview->GetTicketsBySlotIndex(slotIndex);
+    std::vector<CTicketRef> tickets;
+    for(auto ticket : alltickets){
+        if (!coinsview.AccessCoin(COutPoint(ticket->out->hash, ticket->out->n)).IsSpent() || showAll){
+            tickets.push_back(ticket);
+        }
+    }
+
+    for (auto iter = tickets.begin();iter!=tickets.end();iter++){
+        UniValue entry(UniValue::VOBJ);
+        auto ticket = (*iter);
+        int height = ticket->LockTime();
+        auto keyid = ticket->KeyID();
+        uint256 tickethash = ticket->out->hash;
+        if (keyid.size() == 0 || height == 0)
+            continue;
+        std::string state;
+        switch ((*iter)->State(::ChainActive().Tip()->nHeight)){
+        case CTicket::CTicketState::IMMATURATE:
+            state="IMMATURATE";
+            break;
+        case CTicket::CTicketState::USEABLE:
+            state="USEABLE";
+            break;
+        case CTicket::CTicketState::OVERDUE:
+            state= "OVERDUE";
+            break;
+        case CTicket::CTicketState::UNKNOW:
+            state= "UNKNOW";
+            break;
+        }
+        auto out = ticket->out;
+        entry.pushKV("outpoint", out->hash.ToString() + ":" + std::to_string(out->n));
+        entry.pushKV("address", EncodeDestination(PKHash(keyid)));
+        entry.pushKV("lockheight", height);
+        entry.pushKV("state",state);
+        entry.pushKV("isSpent", coinsview.AccessCoin(*out).IsSpent());
+        results.push_back(entry);
+    }
+    return results;
+}
+
+CTransactionRef SendMoneyWithOpRet(interfaces::Chain::Lock& locked_chain, CWallet* const pwallet, const CTxDestination& address, CAmount nValue, bool fSubtractFeeFromAmount, const CScript& optScritp, const CCoinControl& coin_control, mapValue_t&& mapValue)
+{
+    CAmount curBalance = pwallet->GetBalance().m_mine_trusted;
+
+    // Check amount
+    if (nValue <= 0)
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid amount");
+
+    if (nValue > curBalance)
+        throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, "Insufficient funds");
+
+    if (pwallet->GetBroadcastTransactions()) {
+        throw JSONRPCError(RPC_CLIENT_P2P_DISABLED, "Error: Peer-to-peer functionality missing or disabled");
+    }
+
+    // Parse Bitcoin address
+    CScript scriptPubKey = GetScriptForDestination(address);
+
+    // Create and send the transaction
+    CAmount nFeeRequired;
+    std::string strError;
+    std::vector<CRecipient> vecSend;
+    int nChangePosRet = -1;
+    CRecipient recipient = { scriptPubKey, nValue, fSubtractFeeFromAmount };
+    vecSend.push_back(recipient);
+    vecSend.push_back(CRecipient{optScritp, 0, false});
+    CTransactionRef tx;
+    if (!pwallet->CreateTransaction(locked_chain, vecSend, tx, nFeeRequired, nChangePosRet, strError, coin_control)) {
+        if (!fSubtractFeeFromAmount && nValue + nFeeRequired > curBalance)
+            strError = strprintf("Error: This transaction requires a transaction fee of at least %s", FormatMoney(nFeeRequired));
+        throw JSONRPCError(RPC_WALLET_ERROR, strError);
+    }
+    pwallet->CommitTransaction(tx, std::move(mapValue), {} /* orderForm */);
+    return tx;
+}
+
+
+UniValue buyticket(const JSONRPCRequest& request)
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    CWallet* const pwallet = wallet.get();
+
+    if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
+        return NullUniValue;
+    }
+
+            RPCHelpMan{
+                "buyticket",
+                "\nFreeze some funds to get miner fs\n",
+                {
+                    {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "The address to recvie fs(only keyid)."},
+                    {"changeAddr", RPCArg::Type::STR, RPCArg::Optional::NO, "The address to recvie FML change(only keyid)."},
+                },
+                RPCResult{
+                    RPCResult::Type::STR, "txid", "(string) The tx id."
+                },
+                RPCExamples{
+                    HelpExampleCli("buyticket", "\"1M72Sfpbz1BPpXFHz9m3CdqATR44Jvaydd\" \"1M72Sfpbz1BPpXFHz9m3CdqATR44Jvaydd\"")},
+            }
+    .Check(request);
+    if (::ChainstateActive().IsInitialBlockDownload()) {
+        throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "Block chain downloading...");
+    }
+    pwallet->BlockUntilSyncedToCurrentChain();
+
+    auto locked_chain = pwallet->chain().lock();
+    LOCK(pwallet->cs_wallet);
+
+    CTxDestination dest = DecodeDestination(request.params[0].get_str());
+    CTxDestination changedest = DecodeDestination(request.params[1].get_str());
+    if (!IsValidDestination(dest)) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid buyer address");
+    }
+
+    if (!IsValidDestination(changedest)) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid changer address");
+    }
+
+    if (dest.type() != typeid(PKHash)) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Only support PUBKEYHASH");
+    }
+
+    if (changedest.type() != typeid(PKHash)) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Only support PUBKEYHASH");
+    }
+
+    auto keyID = CKeyID(boost::get<PKHash>(dest));
+    auto changekeyID = CKeyID(boost::get<PKHash>(changedest));
+
+    LOCK(cs_main);
+    auto locktime = pticketview->LockTime();
+    if (locktime == ::ChainActive().Height()) {
+        throw JSONRPCError(RPC_VERIFY_REJECTED, "Can't buy firestone on slot's last block.");
+    }
+    
+    if (pticketview->SlotIndex() < 5) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Can't buy firestone on 0 ~ 4 slots.");
+    }
+    
+    auto nAmount = pticketview->CurrentTicketPrice();
+    auto redeemScript = GenerateTicketScript(keyID, locktime);
+    dest = CTxDestination(ScriptHash(CScriptID(redeemScript)));
+    auto scriptPubkey = GetScriptForDestination(dest);
+    auto opRetScript = CScript() << OP_RETURN << CTicket::VERSION << ToByteVector(redeemScript);
+    LogPrint(BCLog::FIRESTONE, "%s: locktime:%d, nAmount:%d\n", __func__, locktime, nAmount);
+    
+    //set change dest
+    CCoinControl coin_control;
+    coin_control.destChange = CTxDestination(PKHash(changekeyID));
+
+    mapValue_t mapValue;
+    CTransactionRef tx = SendMoneyWithOpRet(*locked_chain, pwallet, dest, nAmount, false, opRetScript, coin_control, std::move(mapValue));
+
+    std::set<CScript> scripts = {redeemScript};
+    pwallet->ImportScripts(scripts, 0 /* timestamp */);
+    scripts.insert(GetScriptForDestination(ScriptHash(CScriptID(redeemScript))));
+    pwallet->ImportScriptPubKeys("tickets", scripts, false /* have_solving_data */, true /* apply_label */, 1 /* timestamp */);
+    return tx->GetHash().GetHex();
+}
+
+CTransactionRef CreateTicketSpendTx(CWallet* const pwallet, const CScript& redeemScript, const uint256& txid, const int n, const CTxOut& out, CTxDestination& dest, CKey& key)
+{
+    CMutableTransaction mtx;
+
+    //mtx.nVersion = 1;
+    mtx.vin.push_back(CTxIn(txid, n, redeemScript, 0));
+    mtx.vout.push_back(CTxOut(out.nValue, GetScriptForDestination(dest)));
+    mtx.nLockTime = ::ChainActive().Height();
+
+	{
+	  CMutableTransaction txcopyforfee(mtx);
+	  auto nBytes = GetVirtualTransactionSize(CTransaction(txcopyforfee));
+	  if (nBytes < 0) {
+		throw JSONRPCError(RPC_INVALID_PARAMETER, "Signing transaction failed");
+	  }
+	  nBytes += CPubKey::SIGNATURE_SIZE + CPubKey::SIZE;
+
+	  FeeCalculation feeCalc;
+	  CCoinControl coin_control;
+	  CAmount nFeeNeeded = GetMinimumFee(*pwallet, nBytes, coin_control, &feeCalc);
+	  if (feeCalc.reason == FeeReason::FALLBACK && !pwallet->m_allow_fallback_fee) {
+		// eventually allow a fallback fee
+		throw JSONRPCError(RPC_INVALID_PARAMETER,"Fee estimation failed. Fallbackfee is disabled. Wait a few blocks or enable -fallbackfee.");
+	  }
+
+	  // If we made it here and we aren't even able to meet the relay fee on the next pass, give up
+	  // because we must be at the maximum allowed fee.
+	  if (nFeeNeeded < ::minRelayTxFee.GetFee(nBytes))
+	  {
+		throw JSONRPCError(RPC_INVALID_PARAMETER, "Transaction too large for fee policy");
+	  }
+	  mtx.vout[0].nValue=out.nValue - nFeeNeeded;
+	}
+
+    CMutableTransaction txcopy(mtx);
+    txcopy.vin[0] = CTxIn(txcopy.vin[0].prevout, redeemScript, 0);
+    CHashWriter ss(SER_GETHASH, 0);
+    ss << txcopy << 1;
+    auto hash = ss.GetHash();
+    std::vector<unsigned char> vchSig;
+    if (!key.Sign(hash, vchSig)) {
+        //TODO: error catch 
+        return MakeTransactionRef();
+    }
+    vchSig.push_back((unsigned char)SIGHASH_ALL);
+    mtx.vin[0].scriptSig = CScript() << vchSig << ToByteVector(key.GetPubKey()) << ToByteVector(redeemScript);
+	CTransaction tx(mtx);
+    return MakeTransactionRef(tx);
+}
+
+UniValue freeticket(const JSONRPCRequest& request)
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    CWallet* const pwallet = wallet.get();
+
+    if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
+        return NullUniValue;
+    }
+
+            RPCHelpMan{
+                "freeticket",
+                "\nSpend frozen output to address.\n",
+                {
+                    {"ticketid", RPCArg::Type::STR, RPCArg::Optional::NO, "The transaction id."},
+                    {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "The address to recvie."},
+                },
+                RPCResult{
+                    RPCResult::Type::STR, "txid", "(string) The tx id."
+                },
+                RPCExamples{
+                    HelpExampleCli("freeticket", "\"8199ceda82a056700475d645e2a0cd588b6853e87e1b4b8a459814078799dd87\" \"1M72Sfpbz1BPpXFHz9m3CdqATR44Jvaydd\"")},
+            }
+    .Check(request);
+
+	auto ticketid = ParseHashV(request.params[0], "params 1");
+	CTicket ticket;
+    {
+        LOCK(cs_main);
+        if (ticket.State(::ChainActive().Tip()->nHeight) != CTicket::CTicketState::OVERDUE){
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "ticket is not overdue.");
+        }
+    }
+
+	auto txid = ticket.out->hash;
+	auto redeemScript = ticket.redeemScript;
+	auto scriptPubkey = ticket.scriptPubkey;
+
+    auto prevTx = MakeTransactionRef();
+    //LOCK(cs_main);
+    uint256 hashBlock;
+    if (!GetTransaction(txid, prevTx, Params().GetConsensus(), hashBlock)) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "No such gettransaction.");
+    }
+
+    {
+        // check redeemScript
+		CScriptID scriptid;
+		auto ticketscript = scriptPubkey;
+		CScriptBase::const_iterator pc = ticketscript.begin();
+		opcodetype opcodeRet;
+		std::vector<unsigned char> vchRet;
+		if (ticketscript.GetOp(pc, opcodeRet, vchRet) 
+			&& ticketscript.GetOp(pc, opcodeRet, vchRet)) {
+			scriptid = CScriptID(uint160(vchRet));
+			if (!ticketscript.GetOp(pc, opcodeRet, vchRet) || opcodeRet != OP_EQUAL) {
+				throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid ticket ScriptPubkey");
+			}
+		}else{
+			throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid ticket ScriptPubkey");
+		}
+
+		// parese the dest from redeemscript
+		CScriptID dest = CScriptID(redeemScript);
+
+		if (dest != scriptid){
+			throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid ticket RedeemScript");
+		}
+    }
+
+	auto n = ticket.out->n;
+    if (n < 0 || n >= prevTx->vout.size()) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid params");
+    }
+    CTxDestination dest = DecodeDestination(request.params[1].get_str());
+    if (!IsValidDestination(dest)) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid address");
+    }
+    //get key
+    CKeyID keyid;
+    int lockHeight;
+    if (!DecodeTicketScript(redeemScript, keyid, lockHeight)) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid redeem script");
+    }
+    if (lockHeight > ::ChainActive().Height()) {
+        throw JSONRPCError(RPC_TRANSACTION_REJECTED, "Redeem script non-final");
+    }
+    CKey vchSecret;
+    LegacyScriptPubKeyMan& spk_man = EnsureLegacyScriptPubKeyMan(*wallet);
+    {
+        LOCK2(pwallet->cs_wallet, spk_man.cs_KeyStore);
+        EnsureWalletIsUnlocked(pwallet);
+        if (!spk_man.GetKey(keyid, vchSecret)) {
+            throw JSONRPCError(RPC_WALLET_ERROR, "Private key for address " + request.params[0].get_str() + " is not known");
+        }
+    }
+    auto tx = CreateTicketSpendTx(pwallet, redeemScript, prevTx->GetHash(), n, prevTx->vout[n], dest, vchSecret);
+    if (!tx) {
+        throw JSONRPCError(RPC_TRANSACTION_REJECTED, "Create ticket spend transaction error.");
+    }
+    std::string errStr;
+    if (! pwallet->chain().broadcastTransaction(tx, pwallet->m_default_max_tx_fee, true, errStr)) {
+        throw JSONRPCError(RPC_TRANSACTION_REJECTED, errStr);
+    }
+    return tx->GetHash().GetHex();
+}
+
+CTransactionRef CreateTicketAllSpendTx(CWallet* const pwallet, std::map<uint256,std::pair<int,CScript>> txScriptInputs, std::vector<CTxOut> outs, CTxDestination& dest, CKey& key)
+{
+	CMutableTransaction mtx;
+	mtx.nLockTime = ::ChainActive().Height();
+	// add vin into mtx
+	int index=0;
+	unsigned int pubKeySizeSum = 0;
+	for(auto iter=txScriptInputs.begin(); iter!=txScriptInputs.end(); iter++){
+		mtx.vin.push_back(CTxIn(iter->first, iter->second.first, iter->second.second, index)); 
+		pubKeySizeSum += CPubKey::SIGNATURE_SIZE + CPubKey::SIZE;
+		index++;
+	}
+	// add vout value in new vout 
+	CAmount value = 0;
+	for (auto iter=outs.begin(); iter!=outs.end(); iter++){
+		value += iter->nValue;
+	}
+	mtx.vout.push_back(CTxOut(value, GetScriptForDestination(dest)));
+
+	{
+	  CMutableTransaction txcopyforfee(mtx);
+	  auto nBytes = GetVirtualTransactionSize(CTransaction(txcopyforfee));
+	  if (nBytes < 0) {
+		throw JSONRPCError(RPC_INVALID_PARAMETER, "Signing transaction failed");
+	  }
+	  nBytes += pubKeySizeSum;
+
+	  FeeCalculation feeCalc;
+	  CCoinControl coin_control;
+	  CAmount nFeeNeeded = GetMinimumFee(*pwallet, nBytes, coin_control, &feeCalc);
+	  if (feeCalc.reason == FeeReason::FALLBACK && !pwallet->m_allow_fallback_fee) {
+		// eventually allow a fallback fee
+		throw JSONRPCError(RPC_INVALID_PARAMETER,"Fee estimation failed. Fallbackfee is disabled. Wait a few blocks or enable -fallbackfee.");
+	  }
+
+	  // If we made it here and we aren't even able to meet the relay fee on the next pass, give up
+	  // because we must be at the maximum allowed fee.
+	  if (nFeeNeeded < ::minRelayTxFee.GetFee(nBytes))
+	  {
+		throw JSONRPCError(RPC_INVALID_PARAMETER, "Transaction too large for fee policy");
+	  }
+	  mtx.vout[0].nValue -= nFeeNeeded;
+	}
+
+	int nIn = 0;
+	for(auto iter=txScriptInputs.begin(); iter!=txScriptInputs.end(); iter++){
+		CScript redeemScript = iter->second.second;
+		CMutableTransaction txcopy(mtx); 
+		CHashWriter ss(SER_GETHASH, 0);
+
+		// Serialize nVersion
+		::Serialize(ss, txcopy.nVersion);
+		// Serialize vin
+		::WriteCompactSize(ss, txcopy.vin.size());
+		for (unsigned int nInput = 0; nInput < txcopy.vin.size(); nInput++){
+			::Serialize(ss, txcopy.vin[nInput].prevout);
+			// Serialize the script
+			if (nInput != nIn){
+				::Serialize(ss, CScript());
+			}else{
+				CScript::const_iterator it = redeemScript.begin();
+				CScript::const_iterator itBegin = it;
+				opcodetype opcode;
+				unsigned int nCodeSeparators = 0;
+				while (redeemScript.GetOp(it, opcode)) {
+					if (opcode == OP_CODESEPARATOR)
+						nCodeSeparators++;
+				}
+				::WriteCompactSize(ss, redeemScript.size() - nCodeSeparators);
+				it = itBegin;
+				while (redeemScript.GetOp(it, opcode)) {
+					if (opcode == OP_CODESEPARATOR) {
+						ss.write((char*)&itBegin[0], it-itBegin-1);
+						itBegin = it;
+					}
+				}
+				if (itBegin != redeemScript.end())
+					ss.write((char*)&itBegin[0], it-itBegin);
+			}
+			::Serialize(ss, txcopy.vin[nInput].nSequence);
+		}
+
+		// Serialize vout
+		unsigned int nOutputs = txcopy.vout.size();
+		::WriteCompactSize(ss, nOutputs);
+		for (unsigned int nOutput = 0; nOutput < nOutputs; nOutput++){
+			::Serialize(ss, txcopy.vout[nOutput]);
+		}
+
+		// Serialize nLockTime
+		::Serialize(ss, txcopy.nLockTime);
+		ss << 1;
+
+		// Hash the serialization to be signed.
+		auto hash = ss.GetHash();
+		std::vector<unsigned char> vchSig;
+		if (!key.Sign(hash, vchSig)) {
+			//TODO: error catch 
+			return MakeTransactionRef();
+		}
+		vchSig.push_back((unsigned char)SIGHASH_ALL);
+		// vchsig is related to ss above.
+		// ss ==> Hash ==> vchSig
+		// checkSig compares the vchSig with Hash,
+		// the sig Hash in the consensus checkSig is generated by a given process with arguments of scriptCode, *txTo and nIn,
+		// so we should generate the vchSig be fit to that sig Hash, in the way that we do the same process to generate the same sig Hash!
+
+		// different input on the right of ss operator <<, then the different vchsig. 
+		// when checkSig is called, there are three parts inside of the stack:
+		//	1.top of the stack is the 29-bytes redeemScript, which is on the right of vin.scriptSig
+		//	2.middle is the 33-bytes Pubkey, which is in the middle of vin.scriptSig
+		//  3.bottom is the 71-bytes vchSig, which is on the left of vin.scriptSig
+		mtx.vin[nIn].scriptSig = CScript() << vchSig << ToByteVector(key.GetPubKey()) << ToByteVector(redeemScript);
+		nIn++;
+	}
+	
+	CTransaction tx(mtx);
+	return MakeTransactionRef(tx);
+}
+
+UniValue freeaddresstickets(const JSONRPCRequest& request){
+	
+	std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+	CWallet* const pwallet = wallet.get();
+
+	if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
+		return NullUniValue;
+	}
+
+			RPCHelpMan{
+				"freeaddresstickets",
+				"\nSpend overdue and usable frozen tickets output to address.\n",
+			{
+				{"address", RPCArg::Type::STR, RPCArg::Optional::NO, "The address who wants to free tickets."},
+				{"receiver", RPCArg::Type::STR, RPCArg::Optional::NO, "The address received."},
+			},
+            RPCResult{
+                RPCResult::Type::OBJ, "", "",
+                {
+                    {RPCResult::Type::ARR, "tickethash", "", {
+                        {RPCResult::Type::STR, "", "(string)the tickethash"},
+                    }},
+                    {RPCResult::Type::STR, "txid", "(string)the tickethash"},
+                }
+                
+            },
+			RPCExamples{
+				HelpExampleCli("freeaddresstickets", "\"1M72Sfpbz1BPpXFHz9m3CdqATR44Jvaydd\" \"1M72Sfpbz1BPpXFHz9m3CdqATR44Jvaydd\"")},
+			}
+	.Check(request);
+
+	CTxDestination destination = DecodeDestination(request.params[0].get_str());
+	if (!IsValidDestination(destination)) {
+		throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid address");
+	}
+	if (destination.type() != typeid(PKHash)) {
+		throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Only support PUBKEYHASH");
+	}
+
+	CTxDestination receiver;
+	if (request.params[1].isNull()){
+		receiver = destination;
+	}else{
+		receiver = DecodeDestination(request.params[1].get_str());
+	}
+	
+	if (!IsValidDestination(receiver)) {
+		throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid receiver");
+	}
+	if (receiver.type() != typeid(PKHash)) {
+		throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Only support PUBKEYHASH");
+	}
+
+	// listtickets 
+    std::vector<CTicketRef> alltickets;
+    {
+        LOCK(cs_main);
+        auto pkhash = boost::get<PKHash>(destination);
+        alltickets = pticketview->FindeTickets(CKeyID(pkhash));
+    }
+    
+    CCoinsViewCache &coinsview = ::ChainstateActive().CoinsTip();
+    std::vector<CTicketRef> tickets;
+    for(auto i=0;i<alltickets.size();i++){
+        auto ticket = alltickets[i];
+        auto out = *(ticket->out);
+        if (!coinsview.AccessCoin(out).IsSpent() && !mempool.isSpent(out)){
+            tickets.push_back(ticket);
+            if (tickets.size() > 4)
+                break;
+        }
+    }
+
+	// get the overdue tickets
+	UniValue results(UniValue::VOBJ);
+    if (tickets.size() == 0){
+        // return txid, all overdue ticketid
+        results.pushKV("ATTENTION:","YOUR ADDRESS HAS NO FIRESTONES!");
+        return results;
+    }
+
+	std::map<uint256,std::pair<int,CScript>> txScriptInputs;
+	std::vector<CTxOut> outs;
+	UniValue ticketids(UniValue::VARR);
+	for(auto iter = tickets.begin(); iter!=tickets.end(); iter++){
+		auto state = (*iter)->State(::ChainActive().Height());
+		if (state == CTicket::CTicketState::OVERDUE){
+            auto ticket = (*iter);
+            uint256 txid = ticket->out->hash;
+            uint32_t n = ticket->out->n;
+            CScript redeemScript = ticket->redeemScript;
+			ticketids.push_back(txid.ToString() + ":" + std::to_string(n));
+
+			// construct the freeaddresstickets tx inputs.
+			auto prevTx = MakeTransactionRef();
+			uint256 hashBlock;
+			if (!GetTransaction(txid, prevTx, Params().GetConsensus(), hashBlock)) {
+				throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "No such gettransaction which matches the overdue ticket.");
+			}
+			txScriptInputs.insert(std::make_pair(txid,std::make_pair(n,redeemScript)));
+			outs.push_back(prevTx->vout[n]);
+		}
+	}
+	results.pushKV("OutPoint", ticketids);
+
+	// create tickets tx, just one tx for all tickets vins
+    auto pkhash = boost::get<PKHash>(destination);
+	CKeyID keyid = CKeyID(pkhash);
+    CKey vchSecret;
+    LegacyScriptPubKeyMan& spk_man = EnsureLegacyScriptPubKeyMan(*wallet);
+    {
+        LOCK2(pwallet->cs_wallet, spk_man.cs_KeyStore);
+        EnsureWalletIsUnlocked(pwallet);
+        if (!spk_man.GetKey(keyid, vchSecret)) {
+            throw JSONRPCError(RPC_WALLET_ERROR, "Private key for address " + request.params[0].get_str() + " is not known");
+        }
+    }
+	auto tx = CreateTicketAllSpendTx(pwallet, txScriptInputs, outs, receiver, vchSecret);
+
+	std::string errStr;
+	if (pwallet->chain().broadcastTransaction(tx, pwallet->m_default_max_tx_fee, true, errStr)) {
+		throw JSONRPCError(RPC_TRANSACTION_REJECTED, errStr);
+	}
+
+	// return txid, all overdue ticketid
+	results.pushKV("txid", tx->GetHash().GetHex());
+	return results;
+}
+
+UniValue getslotinfo(const JSONRPCRequest& request)
+{
+            RPCHelpMan{ "getslotinfo",
+                "Returns an object containing fire stone slot info.\n",
+                {
+                    {"index", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "slot index."},
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "","",
+                    {
+                        {RPCResult::Type::NUM, "index", " xx,                  (numeric) the index of fire stone slot"},
+                        {RPCResult::Type::NUM, "price", " xxxxxx,              (numeric) the current price of fire stone slot"},
+                        {RPCResult::Type::NUM, "count", " xx,                  (numeric) the count of tickets in this slot"},
+                        {RPCResult::Type::NUM, "locktime", " xxxxx,            (numeric) the end of this slot"},
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("getslotinfo", "") + HelpExampleCli("getslotinfo", "2")
+                },
+            }.Check(request);
+    LOCK(cs_main);
+    int index = pticketview->SlotIndex();
+    if (!request.params[0].isNull()) {
+        index = request.params[0].get_int();
+    }
+    if (index < 0 || index > pticketview->SlotIndex()) {
+        throw JSONRPCError(RPC_TYPE_ERROR, "Invalid slot index");
+    }
+    UniValue obj(UniValue::VOBJ);
+    obj.pushKV("index", index);
+    obj.pushKV("price", pticketview->TicketPriceInSlot(index));
+    obj.pushKV("count", (uint64_t)pticketview->GetTicketsBySlotIndex(index).size());
+    obj.pushKV("locktime", pticketview->LockTime(index));
+    return obj;
+}
+
 UniValue abortrescan(const JSONRPCRequest& request); // in rpcdump.cpp
 UniValue dumpprivkey(const JSONRPCRequest& request); // in rpcdump.cpp
 UniValue importprivkey(const JSONRPCRequest& request);
@@ -4324,6 +5075,14 @@ static const CRPCCommand commands[] =
     { "wallet",             "walletpassphrase",                 &walletpassphrase,              {"passphrase","timeout"} },
     { "wallet",             "walletpassphrasechange",           &walletpassphrasechange,        {"oldpassphrase","newpassphrase"} },
     { "wallet",             "walletprocesspsbt",                &walletprocesspsbt,             {"psbt","sign","sighashtype","bip32derivs"} },
+
+    // for ticket
+    { "ticket",             "buyticket",                        &buyticket,                     {"address","changer"} },
+    { "ticket",             "freeticket",                       &freeticket,                    {"txid", "vout", "redeem", "address"} },
+	{ "ticket",             "freeaddresstickets",			    &freeaddresstickets,			{"address", "receiver"} },
+    { "ticket",             "getaddresstickets",                &getaddresstickets,             {"addresses","all"} },
+    { "ticket",             "listtickets",                      &listtickets,                   {"index","all"} },
+    { "ticket",             "getslotinfo",                      &getslotinfo,                   {"index"} }, 
 };
 // clang-format on
 

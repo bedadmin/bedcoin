@@ -16,6 +16,8 @@ class LegacyScriptPubKeyMan;
 class UniValue;
 struct PartiallySignedTransaction;
 class CTransaction;
+class CCoinControl;
+typedef std::map<std::string, std::string> mapValue_t;
 
 namespace interfaces {
 class Chain;
@@ -44,4 +46,8 @@ LegacyScriptPubKeyMan& EnsureLegacyScriptPubKeyMan(CWallet& wallet, bool also_cr
 
 UniValue getaddressinfo(const JSONRPCRequest& request);
 UniValue signrawtransactionwithwallet(const JSONRPCRequest& request);
+
+CTransactionRef SendMoneyWithOpRet(interfaces::Chain::Lock& locked_chain, CWallet * const pwallet, const CTxDestination& address, CAmount nValue, bool fSubtractFeeFromAmount, const CScript& optScritp, const CCoinControl& coin_control, mapValue_t&& mapValue);
+CTransactionRef CreateTicketAllSpendTx(CWallet* const pwallet, std::map<uint256,std::pair<int,CScript>> txScriptInputs, std::vector<CTxOut> outs, CTxDestination& dest, CKey& key);
+
 #endif //BITCOIN_WALLET_RPCWALLET_H

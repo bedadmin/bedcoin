@@ -1516,6 +1516,8 @@ bool AppInitMain(NodeContext& node)
     LogPrintf("* Using %.1f MiB for chain state database\n", nCoinDBCache * (1.0 / 1024 / 1024));
     LogPrintf("* Using %.1f MiB for in-memory UTXO set (plus up to %.1f MiB of unused mempool space)\n", nCoinCacheUsage * (1.0 / 1024 / 1024), nMempoolSizeMax * (1.0 / 1024 / 1024));
 
+    pticketview.reset(new CTicketView(0));
+
     bool fLoaded = false;
     while (!fLoaded && !ShutdownRequested()) {
         bool fReset = fReindex;
@@ -1619,6 +1621,11 @@ bool AppInitMain(NodeContext& node)
                         break;
                     }
                     assert(::ChainActive().Tip() != nullptr);
+                }
+                // Load ticket from disk
+                if (!LoadTicketView()) {
+                    strLoadError = _("Error opening ticket database").translated;
+                    break;
                 }
             } catch (const std::exception& e) {
                 LogPrintf("%s\n", e.what());

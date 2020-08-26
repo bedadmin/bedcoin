@@ -37,6 +37,7 @@ class CBlockIndex;
 class CBlockTreeDB;
 class CBlockUndo;
 class CChainParams;
+class CCoinsViewDB;
 class CInv;
 class CConnman;
 class CScriptCheck;
@@ -320,6 +321,7 @@ bool TestLockPointValidity(const LockPoints* lp) EXCLUSIVE_LOCKS_REQUIRED(cs_mai
  */
 bool CheckSequenceLocks(const CTxMemPool& pool, const CTransaction& tx, int flags, LockPoints* lp = nullptr, bool useExistingLockPoints = false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
+bool LoadTicketView();
 /**
  * Closure representing one script verification
  * Note that this stores references to the spending transaction
@@ -782,6 +784,9 @@ BlockMap& BlockIndex();
 // directly, e.g. init.cpp.
 extern std::unique_ptr<CChainState> g_chainstate;
 
+/** Global variable that points to the active CTicketView (protected by cs_main) */
+extern std::unique_ptr<CTicketView> pticketview;
+
 /** Global variable that points to the active block tree (protected by cs_main) */
 extern std::unique_ptr<CBlockTreeDB> pblocktree;
 
@@ -791,6 +796,8 @@ extern std::unique_ptr<CBlockTreeDB> pblocktree;
  * This is also true for mempool checks.
  */
 int GetSpendHeight(const CCoinsViewCache& inputs);
+
+bool TestTicket(const int height, const CTicketRef ticket);
 
 extern VersionBitsCache versionbitscache;
 

@@ -174,6 +174,7 @@ CBlockIndex* FindForkInGlobalIndex(const CChain& chain, const CBlockLocator& loc
     return chain.Genesis();
 }
 
+std::unique_ptr<CTicketView> pticketview;
 std::unique_ptr<CBlockTreeDB> pblocktree;
 
 // See definition for documentation
@@ -2161,6 +2162,8 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-amount");
     }
 
+    pticketview->ConnectBlock(pindex->nHeight, block, TestTicket);
+
     if (!control.Wait()) {
         LogPrintf("ERROR: %s: CheckQueue failed\n", __func__);
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "block-validation-failed");
@@ -2431,11 +2434,11 @@ void static UpdateTip(const CBlockIndex* pindexNew, const CChainParams& chainPar
             AppendWarning(warningMessages, strprintf(_("%d of last 100 blocks have unexpected version").translated, nUpgraded));
     }
     LogPrintf("%s: new best=%s height=%d version=0x%08x log2_work=%.8g tx=%lu date='%s' progress=%f cache=%.1fMiB(%utxo)%s\n", __func__,
-      pindexNew->GetBlockHash().ToString(), pindexNew->nHeight, pindexNew->nVersion,
-      log(pindexNew->nChainWork.getdouble())/log(2.0), (unsigned long)pindexNew->nChainTx,
-      FormatISO8601DateTime(pindexNew->GetBlockTime()),
-      GuessVerificationProgress(chainParams.TxData(), pindexNew), ::ChainstateActive().CoinsTip().DynamicMemoryUsage() * (1.0 / (1<<20)), ::ChainstateActive().CoinsTip().GetCacheSize(),
-      !warningMessages.empty() ? strprintf(" warning='%s'", warningMessages) : "");
+    pindexNew->GetBlockHash().ToString(), pindexNew->nHeight, pindexNew->nVersion,
+    log(pindexNew->nChainWork.getdouble())/log(2.0), (unsigned long)pindexNew->nChainTx,
+    FormatISO8601DateTime(pindexNew->GetBlockTime()),
+    GuessVerificationProgress(chainParams.TxData(), pindexNew), ::ChainstateActive().CoinsTip().DynamicMemoryUsage() * (1.0 / (1<<20)), ::ChainstateActive().CoinsTip().GetCacheSize(),
+    !warningMessages.empty() ? strprintf(" warning='%s'", warningMessages) : "");
 
 }
 
@@ -2463,6 +2466,7 @@ bool CChainState::DisconnectTip(BlockValidationState& state, const CChainParams&
     {
         CCoinsViewCache view(&CoinsTip());
         assert(view.GetBestBlock() == pindexDelete->GetBlockHash());
+        pticketview->DisconnectBlock(pindexDelete->nHeight, block);
         if (DisconnectBlock(block, pindexDelete, view) != DISCONNECT_OK)
             return error("DisconnectTip(): DisconnectBlock %s failed", pindexDelete->GetBlockHash().ToString());
         bool flushed = view.Flush();
@@ -5117,3 +5121,30 @@ public:
     }
 };
 static CMainCleanup instance_of_cmaincleanup;
+
+bool TestTicket(const int height, const CTicketRef ticket)
+{
+    auto index = pticketview->SlotIndex();
+    auto len = pticketview->SlotLength();
+    if (ticket->LockTime() != ((index + 1) * len -1)) {
+        return false;
+    }
+    if (ticket->nValue != pticketview->CurrentTicketPrice()) {
+        return false;
+    }
+    return true;
+}
+
+bool LoadTicketView()
+{
+    LogPrintf("%s: Load FireStones from block database...\n", __func__);
+    for (auto i = 0; i <= ::ChainActive().Height(); i++) {
+        try {
+            if (!pticketview->LoadTicketFromDisk(i))
+                return error("%s: failed to read ticket from disk, height: %d", __func__, i);
+        } catch (const std::runtime_error& e) {
+            return error("%s: failure: %s", __func__, e.what());
+        }
+    }
+    return true;
+}

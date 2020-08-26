@@ -4,10 +4,11 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <primitives/transaction.h>
-
+#include <core_io.h>
 #include <hash.h>
 #include <tinyformat.h>
 #include <util/strencodings.h>
+#include <script/standard.h>
 
 #include <assert.h>
 
@@ -115,4 +116,89 @@ std::string CTransaction::ToString() const
     for (const auto& tx_out : vout)
         str += "    " + tx_out.ToString() + "\n";
     return str;
+}
+
+// check the tx's ticket vout
+bool IsTicketVout(const CScript script, CScriptID &scriptID)
+{
+    CScriptBase::const_iterator pc = script.begin();
+    opcodetype opcodeRet;
+    std::vector<unsigned char> vchRet;
+    if (script.GetOp(pc, opcodeRet, vchRet) && opcodeRet == OP_HASH160) {
+	vchRet.clear();
+	if (script.GetOp(pc, opcodeRet, vchRet)) {
+	    scriptID = CScriptID(uint160(vchRet));
+	    if (script.GetOp(pc, opcodeRet, vchRet) && opcodeRet == OP_EQUAL) {
+		vchRet.clear();
+		return true;
+	    }
+	}
+    }
+    return false;
+}
+
+bool CTransaction::IsTicketTx() const
+{
+    // check the vout size is 2 or 3.
+    if(vout.size()!=2 && vout.size()!=3){
+	    return false;
+    }
+    
+    CScript redeemscript;
+    CScriptID scriptID;
+    CScript scriptzero;
+    bool HasTicketVout = false;
+    for (auto i=0; i<vout.size();i++){
+	if (vout[i].nValue == 0){
+	    // from 0 value vout's script decode the redeemScript.
+	    CScript script = vout[i].scriptPubKey;
+	    scriptzero = script;
+	    if (!GetRedeemFromScript(script,redeemscript)){
+                return false;
+	    }
+	}
+
+	auto ticketScript = vout[i].scriptPubKey;
+	if (IsTicketVout(ticketScript, scriptID)){
+	    HasTicketVout=true;
+	}
+    }
+
+    if (!HasTicketVout) 
+        return false;
+
+    // parese the dest from redeemscript
+    CScriptID dest = CScriptID(redeemscript);
+
+    if (dest == scriptID){
+        return true;
+    }
+
+    return false;
+}
+
+CTicketRef CTransaction::Ticket() const
+{
+    auto ticket = CTicketRef();
+    if (!IsTicketTx()) 
+        return ticket;
+    CScript redeemScript;
+    CScript ticketScript;
+    for (int i = 0; i < vout.size(); i++) {
+        auto out = vout[i];
+        if (out.nValue == 0) { // op_return script
+            if (!GetRedeemFromScript(out.scriptPubKey, redeemScript)) {
+                //TODO: logging
+                break;
+            }
+            ticketScript << OP_HASH160 << ToByteVector(CScriptID(redeemScript)) << OP_EQUAL;
+        } 
+    }
+    for (int i = 0; i < vout.size(); i++) {
+        auto out = vout[i];
+        if (out.nValue != 0 && ticketScript == out.scriptPubKey) {
+            ticket.reset(new CTicket(COutPoint(hash, i), out.nValue, redeemScript, ticketScript));
+        }
+    }
+    return ticket;
 }

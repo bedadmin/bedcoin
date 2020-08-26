@@ -11,6 +11,7 @@
 #include <script/script.h>
 #include <serialize.h>
 #include <uint256.h>
+#include <ticket.h>
 
 static const int SERIALIZE_TRANSACTION_NO_WITNESS = 0x40000000;
 
@@ -360,6 +361,10 @@ public:
         }
         return false;
     }
+
+    bool IsTicketTx() const;
+
+    CTicketRef Ticket() const;
 };
 
 /** A mutable version of CTransaction. */
