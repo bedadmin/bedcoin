@@ -1,6 +1,7 @@
 # Build directories
 Debug/*
 Release/*
+x64/*
 .vs
 packages/*
 */Obj

@@ -28,8 +28,12 @@
     <ClCompile Include="..\..\src\script\interpreter.cpp" />
     <ClCompile Include="..\..\src\script\script.cpp" />
     <ClCompile Include="..\..\src\script\script_error.cpp" />
+    <ClCompile Include="..\..\src\ticket.cpp" />
     <ClCompile Include="..\..\src\uint256.cpp" />
     <ClCompile Include="..\..\src\util\strencodings.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\src\ticket.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
