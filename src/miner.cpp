@@ -136,6 +136,8 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
 
     if (ticketTx && !ticketTx->IsNull()) {
         pblock->vtx.emplace_back(ticketTx);
+        pblocktemplate->vTxFees.push_back(0); // updated at end
+        pblocktemplate->vTxSigOpsCost.push_back(0); // updated at end
     }
     
     int nPackagesSelected = 0;
