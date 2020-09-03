@@ -52,7 +52,7 @@ static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesi
 static CBlock CreateGenesisBlock(uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
 {
     const char* pszTimestamp = "Bit Ecological Digital Currency Systeam";
-    auto&& vgenesisOutputScript = ParseHex("76a914f666aeddb00617d3bef7d03e43839919368f37f088ac");
+    auto&& vgenesisOutputScript = ParseHex("001441c6817563825a4a0127235299f6e476e2472610");
     auto&& genesisOutputScript = CScript(vgenesisOutputScript.begin(), vgenesisOutputScript.end());
     return CreateGenesisBlock(pszTimestamp, genesisOutputScript, nTime, nNonce, nBits, nVersion, genesisReward);
 }
@@ -107,7 +107,7 @@ public:
         m_assumed_blockchain_size = 320;
         m_assumed_chain_state_size = 4;
 
-        genesis = CreateGenesisBlock(1598112273, 58, 0x200000ff, 1, 3150000 * COIN);
+        genesis = CreateGenesisBlock(1598112273, 1000000000, 0x1d00ffff, 1, 3150000 * COIN);
         while (!CheckProofOfWork(genesis.GetHash(), genesis.nBits, consensus)) {
             ++(genesis.nNonce);
             if (genesis.nNonce % 10000 == 0)
@@ -138,8 +138,8 @@ public:
         fRequireStandard = true;
         m_is_test_chain = false;
         m_is_mockable_chain = false;
-        nSlotLength = 8;
-        auto&& vstakingScriptPubKey = ParseHex("76a914f666aeddb00617d3bef7d03e43839919368f37f088ac");
+        nSlotLength = 1008;
+        auto&& vstakingScriptPubKey = ParseHex("0014b2036e133047054b4b4877773755b8d192be06bf");
         stakingScriptPubKey = CScript(vstakingScriptPubKey.begin(), vstakingScriptPubKey.end());
 
         chainTxData = ChainTxData{
@@ -221,7 +221,8 @@ public:
         m_is_test_chain = true;
         m_is_mockable_chain = false;
         nSlotLength = 1008;
-        stakingScriptPubKey = CScript() << ParseHex("0014b2036e133047054b4b4877773755b8d192be06bf");
+        auto&& vstakingScriptPubKey = ParseHex("0014b2036e133047054b4b4877773755b8d192be06bf");
+        stakingScriptPubKey = CScript(vstakingScriptPubKey.begin(), vstakingScriptPubKey.end());
 
         checkpointData = {
             {
@@ -295,7 +296,8 @@ public:
         m_is_test_chain = true;
         m_is_mockable_chain = true;
         nSlotLength = 8;
-        stakingScriptPubKey = CScript() << ParseHex("0014b2036e133047054b4b4877773755b8d192be06bf");
+        auto&& vstakingScriptPubKey = ParseHex("0014b2036e133047054b4b4877773755b8d192be06bf");
+        stakingScriptPubKey = CScript(vstakingScriptPubKey.begin(), vstakingScriptPubKey.end());
 
         checkpointData = {
             {
