@@ -51,8 +51,9 @@ static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesi
  */
 static CBlock CreateGenesisBlock(uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
 {
-    const char* pszTimestamp = "The Times 03/Jan/2009 Chancellor on brink of second bailout for banks";
-    const CScript genesisOutputScript = CScript() << ParseHex("76a9140096734c883dbec8912bbeebca1c614a91c587d788ac");
+    const char* pszTimestamp = "Bit Ecological Digital Currency Systeam";
+    auto&& vgenesisOutputScript = ParseHex("76a914f666aeddb00617d3bef7d03e43839919368f37f088ac");
+    auto&& genesisOutputScript = CScript(vgenesisOutputScript.begin(), vgenesisOutputScript.end());
     return CreateGenesisBlock(pszTimestamp, genesisOutputScript, nTime, nNonce, nBits, nVersion, genesisReward);
 }
 bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params& params);
@@ -65,15 +66,15 @@ public:
         strNetworkID = CBaseChainParams::MAIN;
         consensus.nSubsidyHalvingInterval = 210000;
         consensus.BIP16Exception = uint256S("0x00000000000002dc756eebf4f49723ed8d30cc28a5f108eb94b1ba88ac4f9c22");
-        consensus.BIP34Height = 1;
+        consensus.BIP34Height = 0;
         consensus.BIP34Hash = uint256S("0x000000000000024b89b42a942fe0d9fea3bb44ab7bd1b19115dd6a759c0808b8");
-        consensus.BIP65Height = 1; // 000000000000000004c2b624ed5d7756c508d90fd0da2c7c679febfa6c4735f0
-        consensus.BIP66Height = 1; // 00000000000000000379eaa19dce8c9b722d46ae6a57c2f1a988119488b50931
-        consensus.CSVHeight = 1; // 000000000000000004a1b34462cb8aeebd5799177f7a29cf28f2d1961716b5b5
-        consensus.SegwitHeight = 1; // 0000000000000000001c8018d9cb3b742ef25114f27563e3fc4a1902167f9893
-        consensus.MinBIP9WarningHeight = 1; // segwit activation height + miner confirmation window
-        //consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        consensus.powLimit = uint256S("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.BIP65Height = 0; // 000000000000000004c2b624ed5d7756c508d90fd0da2c7c679febfa6c4735f0
+        consensus.BIP66Height = 0; // 00000000000000000379eaa19dce8c9b722d46ae6a57c2f1a988119488b50931
+        consensus.CSVHeight = 0; // 000000000000000004a1b34462cb8aeebd5799177f7a29cf28f2d1961716b5b5
+        consensus.SegwitHeight = 0; // 0000000000000000001c8018d9cb3b742ef25114f27563e3fc4a1902167f9893
+        consensus.MinBIP9WarningHeight = 0; // segwit activation height + miner confirmation window
+        consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        //consensus.powLimit = uint256S("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
         consensus.nPowTargetSpacing = 10 * 60;
         consensus.fPowAllowMinDifficultyBlocks = false;
@@ -85,12 +86,12 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nTimeout = 1230767999; // December 31, 2008
 
         // The best chain should have at least this much work.
-        //consensus.nMinimumChainWork = uint256S("0x00");
-        consensus.nMinimumChainWork = uint256S("0x100010001");
+        consensus.nMinimumChainWork = uint256S("0x00");
+        //consensus.nMinimumChainWork = uint256S("0x100010001");
 
         // By default assume that the signatures in ancestors of this block are valid.
-        //consensus.defaultAssumeValid = uint256S("0x00"); // 623950
-        consensus.defaultAssumeValid = uint256S("0x0000000000000000000f2adce67e49b0b6bdeb9de8b7c3d7e93b21e7fc1e819d"); // 623950
+        consensus.defaultAssumeValid = uint256S("0x00"); // 623950
+        //consensus.defaultAssumeValid = uint256S("0x0000000000000000000f2adce67e49b0b6bdeb9de8b7c3d7e93b21e7fc1e819d"); // 623950
 
         /**
          * The message start string is designed to be unlikely to occur in normal data.
@@ -106,12 +107,7 @@ public:
         m_assumed_blockchain_size = 320;
         m_assumed_chain_state_size = 4;
 
-        //1466377152-------------------------0000000095f78837323b66a2ab0983179ba4bf6c5ee92caecb965bd0f32f8437
-        genesis = CreateGenesisBlock(1598112273, 1466377152, 0x1d00ffff, 1, 50 * COIN);
-        CBlockHeader* header = &genesis;
-        CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
-        ss << *header;
-        std::cout << ss.size() << "==============" << HexStr(ss.begin(), ss.end()) << "------" << genesis.GetHash().GetHex() << std::endl;
+        genesis = CreateGenesisBlock(1598112273, 58, 0x200000ff, 1, 3150000 * COIN);
         while (!CheckProofOfWork(genesis.GetHash(), genesis.nBits, consensus)) {
             ++(genesis.nNonce);
             if (genesis.nNonce % 10000 == 0)
@@ -142,7 +138,9 @@ public:
         fRequireStandard = true;
         m_is_test_chain = false;
         m_is_mockable_chain = false;
-        nSlotLength = 2048;
+        nSlotLength = 8;
+        auto&& vstakingScriptPubKey = ParseHex("76a914f666aeddb00617d3bef7d03e43839919368f37f088ac");
+        stakingScriptPubKey = CScript(vstakingScriptPubKey.begin(), vstakingScriptPubKey.end());
 
         chainTxData = ChainTxData{
             // Data from RPC: getchaintxstats 4096 0000000000000000000f2adce67e49b0b6bdeb9de8b7c3d7e93b21e7fc1e819d
@@ -195,7 +193,7 @@ public:
         m_assumed_blockchain_size = 40;
         m_assumed_chain_state_size = 2;
 
-        genesis = CreateGenesisBlock(1296688602, 414098458, 0x1d00ffff, 1, 50 * COIN);
+        genesis = CreateGenesisBlock(1296688602, 414098458, 0x1d00ffff, 1, 3150000 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
         //assert(consensus.hashGenesisBlock == uint256S("0x000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943"));
         //assert(genesis.hashMerkleRoot == uint256S("0x4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"));
@@ -222,6 +220,8 @@ public:
         fRequireStandard = false;
         m_is_test_chain = true;
         m_is_mockable_chain = false;
+        nSlotLength = 1008;
+        stakingScriptPubKey = CScript() << ParseHex("0014b2036e133047054b4b4877773755b8d192be06bf");
 
         checkpointData = {
             {
@@ -282,7 +282,7 @@ public:
 
         UpdateActivationParametersFromArgs(args);
 
-        genesis = CreateGenesisBlock(1296688602, 2, 0x207fffff, 1, 50 * COIN);
+        genesis = CreateGenesisBlock(1296688602, 2, 0x207fffff, 1, 3150000 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
         //assert(consensus.hashGenesisBlock == uint256S("0x0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206"));
         //assert(genesis.hashMerkleRoot == uint256S("0x4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"));
@@ -294,6 +294,8 @@ public:
         fRequireStandard = true;
         m_is_test_chain = true;
         m_is_mockable_chain = true;
+        nSlotLength = 8;
+        stakingScriptPubKey = CScript() << ParseHex("0014b2036e133047054b4b4877773755b8d192be06bf");
 
         checkpointData = {
             {

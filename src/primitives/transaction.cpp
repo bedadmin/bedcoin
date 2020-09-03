@@ -125,14 +125,14 @@ bool IsTicketVout(const CScript script, CScriptID &scriptID)
     opcodetype opcodeRet;
     std::vector<unsigned char> vchRet;
     if (script.GetOp(pc, opcodeRet, vchRet) && opcodeRet == OP_HASH160) {
-	vchRet.clear();
-	if (script.GetOp(pc, opcodeRet, vchRet)) {
-	    scriptID = CScriptID(uint160(vchRet));
-	    if (script.GetOp(pc, opcodeRet, vchRet) && opcodeRet == OP_EQUAL) {
-		vchRet.clear();
-		return true;
+	    vchRet.clear();
+	    if (script.GetOp(pc, opcodeRet, vchRet)) {
+	        scriptID = CScriptID(uint160(vchRet));
+	        if (script.GetOp(pc, opcodeRet, vchRet) && opcodeRet == OP_EQUAL) {
+		    vchRet.clear();
+		    return true;
+	        }
 	    }
-	}
     }
     return false;
 }
@@ -140,7 +140,7 @@ bool IsTicketVout(const CScript script, CScriptID &scriptID)
 bool CTransaction::IsTicketTx() const
 {
     // check the vout size is 2 or 3.
-    if(vout.size()!=2 && vout.size()!=3){
+    if (IsCoinBase() || (vout.size() != 2 && vout.size() != 3)) {
 	    return false;
     }
     
@@ -149,19 +149,19 @@ bool CTransaction::IsTicketTx() const
     CScript scriptzero;
     bool HasTicketVout = false;
     for (auto i=0; i<vout.size();i++){
-	if (vout[i].nValue == 0){
-	    // from 0 value vout's script decode the redeemScript.
-	    CScript script = vout[i].scriptPubKey;
-	    scriptzero = script;
-	    if (!GetRedeemFromScript(script,redeemscript)){
+	    if (vout[i].nValue == 0){
+	        // from 0 value vout's script decode the redeemScript.
+	        auto& script = vout[i].scriptPubKey;
+	        scriptzero = script;
+	        if (! GetRedeemFromScript(script, redeemscript)){
                 return false;
+	        }
 	    }
-	}
 
-	auto ticketScript = vout[i].scriptPubKey;
-	if (IsTicketVout(ticketScript, scriptID)){
-	    HasTicketVout=true;
-	}
+	    auto& ticketScript = vout[i].scriptPubKey;
+	    if (IsTicketVout(ticketScript, scriptID)){
+	        HasTicketVout=true;
+	    }
     }
 
     if (!HasTicketVout) 

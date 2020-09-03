@@ -1621,7 +1621,12 @@ bool AppInitMain(NodeContext& node)
                         break;
                     }
                     assert(::ChainActive().Tip() != nullptr);
+                } else {
+                    COutPoint outpoint(chainparams.GenesisBlock().vtx[0]->GetHash(), 0);
+                    auto txout = chainparams.GenesisBlock().vtx[0]->vout[0];
+                    ::ChainstateActive().CoinsTip().AddCoin(outpoint, Coin(txout, 0, true), true);
                 }
+
                 // Load ticket from disk
                 if (!LoadTicketView()) {
                     strLoadError = _("Error opening ticket database").translated;

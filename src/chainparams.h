@@ -87,6 +87,7 @@ public:
     const CCheckpointData& Checkpoints() const { return checkpointData; }
     const ChainTxData& TxData() const { return chainTxData; }
     const uint32_t SlotLength() const { return nSlotLength; }
+    const CScript& StakingScriptPubKey() const { return stakingScriptPubKey; }
 protected:
     CChainParams() {}
 
@@ -109,6 +110,7 @@ protected:
     CCheckpointData checkpointData;
     ChainTxData chainTxData;
     uint32_t nSlotLength;
+    CScript stakingScriptPubKey;
 };
 
 /**

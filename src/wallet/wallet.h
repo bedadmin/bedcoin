@@ -631,10 +631,10 @@ private:
     friend class WalletRescanReserver;
 
     //! the current wallet version: clients below this version are not able to load the wallet
-    int nWalletVersion GUARDED_BY(cs_wallet){FEATURE_BASE};
+    int nWalletVersion GUARDED_BY(cs_wallet){FEATURE_PRE_SPLIT_KEYPOOL};
 
     //! the maximum wallet format version: memory-only variable that specifies to what version this wallet may be upgraded
-    int nWalletMaxVersion GUARDED_BY(cs_wallet) = FEATURE_BASE;
+    int nWalletMaxVersion GUARDED_BY(cs_wallet) = FEATURE_PRE_SPLIT_KEYPOOL;
 
     int64_t nNextResend = 0;
     int64_t nLastResend = 0;

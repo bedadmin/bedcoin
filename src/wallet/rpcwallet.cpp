@@ -4305,7 +4305,7 @@ static UniValue getaddresstickets(const JSONRPCRequest& request)
     LOCK(cs_main);
     CCoinsViewCache &coinsview = ::ChainstateActive().CoinsTip();
     auto pkhash = boost::get<PKHash>(destination);
-	std::vector<CTicketRef> alltickets = pticketview->FindeTickets(CKeyID(pkhash));
+	std::vector<CTicketRef>& alltickets = pticketview->FindTickets(CKeyID(pkhash));
     std::vector<CTicketRef> tickets;
     for(auto ticket : alltickets){
         if (!coinsview.AccessCoin(COutPoint(ticket->out->hash, ticket->out->n)).IsSpent() || showAll){
@@ -4452,9 +4452,9 @@ CTransactionRef SendMoneyWithOpRet(interfaces::Chain::Lock& locked_chain, CWalle
     if (nValue > curBalance)
         throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, "Insufficient funds");
 
-    if (pwallet->GetBroadcastTransactions()) {
-        throw JSONRPCError(RPC_CLIENT_P2P_DISABLED, "Error: Peer-to-peer functionality missing or disabled");
-    }
+    //if (pwallet->GetBroadcastTransactions()) {
+    //    throw JSONRPCError(RPC_CLIENT_P2P_DISABLED, "Error: Peer-to-peer functionality missing or disabled");
+    //}
 
     // Parse Bitcoin address
     CScript scriptPubKey = GetScriptForDestination(address);
@@ -4536,7 +4536,7 @@ UniValue buyticket(const JSONRPCRequest& request)
         throw JSONRPCError(RPC_VERIFY_REJECTED, "Can't buy firestone on slot's last block.");
     }
     
-    if (pticketview->SlotIndex() < 5) {
+    if (pticketview->SlotIndex() < 1) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Can't buy firestone on 0 ~ 4 slots.");
     }
     
@@ -4700,6 +4700,7 @@ UniValue freeticket(const JSONRPCRequest& request)
     CKey vchSecret;
     LegacyScriptPubKeyMan& spk_man = EnsureLegacyScriptPubKeyMan(*wallet);
     {
+        auto locked_chain = pwallet->chain().lock();
         LOCK2(pwallet->cs_wallet, spk_man.cs_KeyStore);
         EnsureWalletIsUnlocked(pwallet);
         if (!spk_man.GetKey(keyid, vchSecret)) {
@@ -4891,22 +4892,20 @@ UniValue freeaddresstickets(const JSONRPCRequest& request){
 	}
 
 	// listtickets 
-    std::vector<CTicketRef> alltickets;
-    {
-        LOCK(cs_main);
-        auto pkhash = boost::get<PKHash>(destination);
-        alltickets = pticketview->FindeTickets(CKeyID(pkhash));
-    }
-    
-    CCoinsViewCache &coinsview = ::ChainstateActive().CoinsTip();
     std::vector<CTicketRef> tickets;
-    for(auto i=0;i<alltickets.size();i++){
-        auto ticket = alltickets[i];
-        auto out = *(ticket->out);
-        if (!coinsview.AccessCoin(out).IsSpent() && !mempool.isSpent(out)){
-            tickets.push_back(ticket);
-            if (tickets.size() > 4)
-                break;
+    {
+        CCoinsViewCache &coinsview = ::ChainstateActive().CoinsTip();
+        auto pkhash = boost::get<PKHash>(destination);
+
+        LOCK2(cs_main, mempool.cs);
+        auto& minetickets = pticketview->FindTickets(CKeyID(pkhash));
+        for(auto& ticket : minetickets) {
+            const auto& out = *(ticket->out);
+            if (!coinsview.AccessCoin(out).IsSpent() && !mempool.isSpent(out)){
+                tickets.push_back(ticket);
+                if (tickets.size() > 4)
+                    break;
+            }
         }
     }
 
@@ -4948,6 +4947,7 @@ UniValue freeaddresstickets(const JSONRPCRequest& request){
     CKey vchSecret;
     LegacyScriptPubKeyMan& spk_man = EnsureLegacyScriptPubKeyMan(*wallet);
     {
+        auto locked_chain = pwallet->chain().lock();
         LOCK2(pwallet->cs_wallet, spk_man.cs_KeyStore);
         EnsureWalletIsUnlocked(pwallet);
         if (!spk_man.GetKey(keyid, vchSecret)) {

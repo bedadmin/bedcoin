@@ -861,7 +861,15 @@ static UniValue getblock(const JSONRPCRequest& request)
                 },
     }.Check(request);
 
-    uint256 hash(ParseHashV(request.params[0], "blockhash"));
+    int nHeight{0};
+    uint256 hash;
+    try {
+        hash = uint256(ParseHashV(request.params[0], "blockhash"));
+    } catch (...) {
+        nHeight = std::stol(request.params[0].get_str());
+        if (nHeight < 0 || nHeight > ::ChainActive().Height())
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Block height out of range");
+    }
 
     int verbosity = 1;
     if (!request.params[1].isNull()) {
@@ -876,7 +884,10 @@ static UniValue getblock(const JSONRPCRequest& request)
     const CBlockIndex* tip;
     {
         LOCK(cs_main);
-        pblockindex = LookupBlockIndex(hash);
+        if (hash.IsNull())
+            pblockindex = ::ChainActive()[nHeight];
+        else
+            pblockindex = LookupBlockIndex(hash);
         tip = ::ChainActive().Tip();
 
         if (!pblockindex) {

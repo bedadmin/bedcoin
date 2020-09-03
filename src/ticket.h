@@ -13,8 +13,6 @@ CScript GenerateTicketScript(const CKeyID keyid, const int lockHeight);
 
 bool DecodeTicketScript(const CScript redeemScript, CKeyID& keyID, int &lockHeight);
 
-bool GetPublicKeyFromScript(const CScript script, CPubKey& pubkey);
-
 bool GetRedeemFromScript(const CScript script, CScript& redeemscript);
 
 class COutPoint;
@@ -93,14 +91,14 @@ public:
      */
     CAmount CurrentTicketPrice() const;
 
-    std::vector<CTicketRef> CurrentSlotTicket();
+    std::vector<CTicketRef>& CurrentSlotTicket();
     
     /** 
      * Find all firestone owned by the KeyID.
      */
-    std::vector<CTicketRef> FindeTickets(const CKeyID key);
+    std::vector<CTicketRef>& FindTickets(const CKeyID& key);
 
-    std::vector<CTicketRef> GetTicketsBySlotIndex(const int slotIndex);
+    std::vector<CTicketRef>& GetTicketsBySlotIndex(const int slotindex);
 
     const int SlotIndex() const { return slotIndex; }
     

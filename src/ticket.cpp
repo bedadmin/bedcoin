@@ -39,47 +39,13 @@ bool DecodeTicketScript(const CScript redeemScript, CKeyID& keyID, int &lockHeig
     return false;
 }
 
-bool GetPublicKeyFromScript(const CScript script, CPubKey &pubkey)
-{
-    CScriptBase::const_iterator pc = script.begin();
-    opcodetype opcodeRet;
-    vector<unsigned char> vchRet;
-    if (script.GetOp(pc, opcodeRet, vchRet) && CScriptNum(vchRet,true)> 0) {
-        vchRet.clear();
-        if (script.GetOp(pc, opcodeRet, vchRet) && opcodeRet == OP_CHECKLOCKTIMEVERIFY) {
-            vchRet.clear();
-            if (script.GetOp(pc, opcodeRet, vchRet) && opcodeRet == OP_DROP) {
-                vchRet.clear();
-                if (script.GetOp(pc, opcodeRet, vchRet) && opcodeRet == OP_DUP) {
-					vchRet.clear();
-					if (script.GetOp(pc, opcodeRet, vchRet) && opcodeRet == OP_HASH160) {
-						vchRet.clear();
-						if (script.GetOp(pc, opcodeRet, vchRet) && vchRet.size() == 20) {
-							if (script.GetOp(pc, opcodeRet, vchRet) && opcodeRet == OP_EQUALVERIFY) {
-								vchRet.clear();
-								if (script.GetOp(pc, opcodeRet, vchRet) && opcodeRet == OP_CHECKSIG) {
-									vchRet.clear();
-									return true;
-								}
-							}
-						}
-					}
-                }
-            }
-        }
-    }
-    return false;
-}
-
 bool GetRedeemFromScript(const CScript script, CScript& redeemscript)
 {
 	CScriptBase::const_iterator pc = script.begin();
 	opcodetype opcodeRet;
 	vector<unsigned char> vchRet;
 	if (script.GetOp(pc, opcodeRet, vchRet) && opcodeRet == OP_RETURN) {
-		vchRet.clear();
 		if (script.GetOp(pc, opcodeRet, vchRet)) {
-			vchRet.clear();
 			if (script.GetOp(pc, opcodeRet, vchRet)) {
 				redeemscript = CScript(vchRet.begin(),vchRet.end());
 				return true;
@@ -201,12 +167,14 @@ bool CTicket::Invalid() const
 	return true;
 }
 
-CAmount CTicketView::BaseTicketPrice = 14300 * COIN;
-CAmount nSlotLowerBoundTickerPrice = 1430 * COIN;
+CAmount CTicketView::BaseTicketPrice = 5 * COIN;
+CAmount nSlotLowerBoundTickerPrice = 1 * COIN;
 static const char DB_TICKET_SYNCED_KEY = 'S';
 static const char DB_TICKET_SLOT_KEY = 'L';
 static const char DB_TICKET_ADDR_KEY = 'A';
 static const char DB_TICKET_HEIGHT_KEY = 'H';
+
+static std::vector<CTicketRef> dummyTickets;
 
 void CTicketView::ConnectBlock(const int height, const CBlock &blk, CheckTicketFunc checkTicket)
 {
@@ -252,19 +220,25 @@ CAmount CTicketView::CurrentTicketPrice() const
     return ticketPrice;
 }
 
-std::vector<CTicketRef> CTicketView::CurrentSlotTicket()
+std::vector<CTicketRef>& CTicketView::CurrentSlotTicket()
 {
-    return ticketsInSlot[slotIndex];
+    return GetTicketsBySlotIndex(slotIndex);
 }
 
-std::vector<CTicketRef> CTicketView::GetTicketsBySlotIndex(const int slotIndex) 
+std::vector<CTicketRef>& CTicketView::GetTicketsBySlotIndex(const int slotindex) 
 {
-    return ticketsInSlot[slotIndex];
+    auto iter = ticketsInSlot.find(slotindex);
+    if (iter != ticketsInSlot.end())
+        return iter->second;
+    return dummyTickets;
 }
 
-std::vector<CTicketRef> CTicketView::FindeTickets(const CKeyID key)
+std::vector<CTicketRef>& CTicketView::FindTickets(const CKeyID& key)
 {
-    return ticketsInAddr[key];
+    auto iter = ticketsInAddr.find(key);
+    if (iter != ticketsInAddr.end())
+        return iter->second;
+    return dummyTickets;
 }
 
 const int CTicketView::SlotLength()
@@ -325,7 +299,7 @@ CAmount CTicketView::TicketPriceInSlot(const int index)
         else if (ticketsInSlot[i].size() < SlotLength()) {
             price = std::max(CAmount(price * 0.95), i * nSlotLowerBoundTickerPrice);
         }
-        price = (i + 1) > 5 ? std::max(BaseTicketPrice, price) : BaseTicketPrice;
+        price = (i + 1) > 1 ? price : BaseTicketPrice;
     }
     return price;
 }
@@ -341,8 +315,8 @@ void CTicketView::updateTicketPrice(const int height)
         else if (prevSlotTicketSize < len) {
             ticketPrice = std::max(CAmount(ticketPrice * 0.95), slotIndex * nSlotLowerBoundTickerPrice);
         }
+        ticketPrice = slotIndex > 1 ? ticketPrice : BaseTicketPrice;
         slotIndex = int(height / len);
-        ticketPrice = slotIndex > 5 ? std::max(BaseTicketPrice, ticketPrice) : BaseTicketPrice;
         LogPrint(BCLog::FIRESTONE, "%s: updata ticket slot, index:%d, price:%d, prevSlotTicketCount:%d\n", __func__, slotIndex, ticketPrice, prevSlotTicketSize);
     }
 }

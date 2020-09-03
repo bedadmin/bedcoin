@@ -1230,6 +1230,22 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
     return nSubsidy;
 }
 
+std::tuple<CAmount, CAmount> GetBlockCoinbaseOutValue(int nHeight, CAmount nSubsidy, bool withTicket)
+{
+    double halvings = 1;
+    if (nHeight < (1 * Params().SlotLength())) {
+        return {CAmount(nSubsidy), 0};
+    } else {
+        halvings = 0.2;
+    }
+
+    if (withTicket) {
+        return {CAmount(nSubsidy), 0};
+    }
+
+    return {CAmount(nSubsidy * halvings), CAmount(nSubsidy - nSubsidy * halvings)};
+}
+
 CoinsViews::CoinsViews(
     std::string ldb_name,
     size_t cache_size_bytes,
@@ -2156,10 +2172,53 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
     int64_t nTime3 = GetTimeMicros(); nTimeConnect += nTime3 - nTime2;
     LogPrint(BCLog::BENCH, "      - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs (%.2fms/blk)]\n", (unsigned)block.vtx.size(), MILLI * (nTime3 - nTime2), MILLI * (nTime3 - nTime2) / block.vtx.size(), nInputs <= 1 ? 0 : MILLI * (nTime3 - nTime2) / (nInputs-1), nTimeConnect * MICRO, nTimeConnect * MILLI / nBlocksTotal);
 
-    CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
-    if (block.vtx[0]->GetValueOut() > blockReward) {
-        LogPrintf("ERROR: ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d)\n", block.vtx[0]->GetValueOut(), blockReward);
+    bool withTicket = false;
+    if (block.vtx.size() >= 2 && pindex->nHeight >= 2 * pticketview->SlotLength()) {
+        auto out = block.vtx[1]->vin[0].prevout;
+        if (block.vtx[0]->vin[0].scriptSig == CScript() << pindex->nHeight << ToByteVector(out.hash) << out.n << OP_0) {
+            LogPrint(BCLog::FIRESTONE, "%s: coinbase with firestone:%s:%d\n", __func__, out.hash.ToString(), out.n);
+            //check ticket
+            auto index = (pindex->nHeight / pticketview->SlotLength()) - 1;
+            for (auto ticket : pticketview->GetTicketsBySlotIndex(index)) {
+                if (*(ticket->out) == out) {
+                    CCoinsViewCache& coinsview = ::ChainstateActive().CoinsTip();
+                    auto ticketInHeight = coinsview.AccessCoin(COutPoint(out)).nHeight;
+                    auto index = pindex->nHeight / pticketview->SlotLength();
+                    auto beg = std::max((index - 1) * pticketview->SlotLength(), 0);
+                    auto end = index * pticketview->SlotLength() - 1;
+                    if (ticketInHeight >= beg && ticketInHeight <= end) {
+                        withTicket = true;
+                        LogPrint(BCLog::FIRESTONE, "%s: coinbase with firestone:%s:%d\n", __func__, ticket->out->hash.ToString(), ticket->out->n);
+                    } else {
+                        LogPrint(BCLog::FIRESTONE, "%s: firestone locktime error firestone:%s:%d\n", __func__, ticket->out->hash.ToString(), ticket->out->n);
+                    }
+                }
+            }
+        }
+    }
+
+    CAmount nMinerReward{0}, nStaking{0};
+    CAmount nSubsidy = GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
+    std::tie(nMinerReward, nStaking) = GetBlockCoinbaseOutValue(pindex->nHeight, nSubsidy, withTicket);
+    nMinerReward += nFees;
+    CAmount nTotalOut = nMinerReward + nStaking;
+    assert(nTotalOut == nSubsidy + nFees);
+    
+    if (block.vtx[0]->GetValueOut() > nTotalOut) {
+        LogPrintf("ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d)\n",
+            block.vtx[0]->GetValueOut(), nTotalOut);
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-amount");
+    }
+
+    if (block.vtx[0]->vout.size() != 3) {
+        LogPrintf("ConnectBlock(): coinbase missing outlet\n");
+        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-no-outlet");
+    }
+
+    if (block.vtx[0]->vout[0].nValue != nMinerReward
+        || block.vtx[0]->vout[1].nValue != nStaking) {
+        LogPrintf("ConnectBlock(): coinbase wrong outlet\n");
+        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-wrong-outlet");
     }
 
     pticketview->ConnectBlock(pindex->nHeight, block, TestTicket);

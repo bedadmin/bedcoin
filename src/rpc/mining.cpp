@@ -9,8 +9,10 @@
 #include <consensus/consensus.h>
 #include <consensus/params.h>
 #include <consensus/validation.h>
+#include <consensus/merkle.h>
 #include <core_io.h>
 #include <key_io.h>
+#include <logging.h>
 #include <miner.h>
 #include <net.h>
 #include <node/context.h>
@@ -19,6 +21,8 @@
 #include <rpc/blockchain.h>
 #include <rpc/server.h>
 #include <rpc/util.h>
+#include <wallet/wallet.h>
+#include <wallet/rpcwallet.h>
 #include <script/descriptor.h>
 #include <script/script.h>
 #include <script/signingprovider.h>
@@ -101,7 +105,55 @@ static UniValue getnetworkhashps(const JSONRPCRequest& request)
     return GetNetworkHashPS(!request.params[0].isNull() ? request.params[0].get_int() : 120, !request.params[1].isNull() ? request.params[1].get_int() : -1);
 }
 
-static UniValue generateBlocks(const CTxMemPool& mempool, const CScript& coinbase_script, int nGenerate, uint64_t nMaxTries)
+static CTransactionRef TryBuildTicketTx(std::shared_ptr<CWallet> wallet, int32_t height)
+{
+    auto index = (height / pticketview->SlotLength()) - 1;
+    if (index < 1)
+        return nullptr;
+    auto& tickets = pticketview->GetTicketsBySlotIndex(index);
+    CTicketRef ticketToUse;
+    CKey vchSecret;
+    CTransactionRef ticketTx{nullptr};
+    {
+        LegacyScriptPubKeyMan& spk_man = EnsureLegacyScriptPubKeyMan(*wallet);
+        CWallet* const pwallet = wallet.get();
+        CCoinsViewCache& coinsview = ::ChainstateActive().CoinsTip();
+        auto locked_chain = pwallet->chain().lock();
+        LOCK2(pwallet->cs_wallet, spk_man.cs_KeyStore);
+        EnsureWalletIsUnlocked(pwallet);
+        for (auto& ticket : tickets) {
+            auto&& keyid = ticket->KeyID();
+            if (! coinsview.AccessCoin(*(ticket->out)).IsSpent() && spk_man.HaveKey(keyid)) {
+                ticketToUse = ticket;
+                spk_man.GetKey(keyid, vchSecret);
+                break;
+            }
+        }
+    }
+    if (ticketToUse && ticketToUse->Invalid() && vchSecret.IsValid()) {
+        CMutableTransaction mtx;
+        auto redeemScript = ticketToUse->redeemScript;
+        mtx.vin.push_back(CTxIn(ticketToUse->out->hash, ticketToUse->out->n, redeemScript, 0));
+        mtx.vout.push_back(CTxOut(ticketToUse->nValue, GetScriptForDestination(CTxDestination(PKHash(vchSecret.GetPubKey().GetID())))));
+        mtx.nLockTime = height - 1;
+
+        CMutableTransaction txcopy(mtx);
+        txcopy.vin[0] = CTxIn(txcopy.vin[0].prevout, redeemScript, 0);
+        CHashWriter ss(SER_GETHASH, 0);
+        ss << txcopy << 1;
+        auto hash = ss.GetHash();
+        std::vector<unsigned char> vchSig;
+        if (vchSecret.Sign(hash, vchSig)) {
+            vchSig.push_back((unsigned char)SIGHASH_ALL);
+            mtx.vin[0].scriptSig = CScript() << vchSig << ToByteVector(vchSecret.GetPubKey()) << ToByteVector(redeemScript);
+            CTransaction tx(mtx);
+            ticketTx = MakeTransactionRef(tx);
+        }
+    }
+    return ticketTx;
+}
+
+static UniValue generateBlocks(std::shared_ptr<CWallet> wallet, const CTxMemPool& mempool, const CScript& coinbase_script, int nGenerate, uint64_t nMaxTries)
 {
     int nHeightEnd = 0;
     int nHeight = 0;
@@ -115,7 +167,8 @@ static UniValue generateBlocks(const CTxMemPool& mempool, const CScript& coinbas
     UniValue blockHashes(UniValue::VARR);
     while (nHeight < nHeightEnd && !ShutdownRequested())
     {
-        std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(mempool, Params()).CreateNewBlock(coinbase_script));
+        auto ticketTx = TryBuildTicketTx(wallet, nHeight + 1);
+        std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(mempool, Params()).CreateNewBlock(coinbase_script, ticketTx));
         if (!pblocktemplate.get())
             throw JSONRPCError(RPC_INTERNAL_ERROR, "Couldn't create new block");
         CBlock *pblock = &pblocktemplate->block;
@@ -144,6 +197,12 @@ static UniValue generateBlocks(const CTxMemPool& mempool, const CScript& coinbas
 
 static UniValue generatetodescriptor(const JSONRPCRequest& request)
 {
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    CWallet* const pwallet = wallet.get();
+    if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
+        return NullUniValue;
+    }
+
     RPCHelpMan{
         "generatetodescriptor",
         "\nMine blocks immediately to a specified descriptor (before the RPC call returns)\n",
@@ -186,11 +245,16 @@ static UniValue generatetodescriptor(const JSONRPCRequest& request)
 
     CHECK_NONFATAL(coinbase_script.size() == 1);
 
-    return generateBlocks(mempool, coinbase_script.at(0), num_blocks, max_tries);
+    return generateBlocks(wallet, mempool, coinbase_script.at(0), num_blocks, max_tries);
 }
 
 static UniValue generatetoaddress(const JSONRPCRequest& request)
 {
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    CWallet* const pwallet = wallet.get();
+    if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
+        return NullUniValue;
+    }
             RPCHelpMan{"generatetoaddress",
                 "\nMine blocks immediately to a specified address (before the RPC call returns)\n",
                 {
@@ -226,7 +290,7 @@ static UniValue generatetoaddress(const JSONRPCRequest& request)
 
     CScript coinbase_script = GetScriptForDestination(destination);
 
-    return generateBlocks(mempool, coinbase_script, nGenerate, nMaxTries);
+    return generateBlocks(wallet, mempool, coinbase_script, nGenerate, nMaxTries);
 }
 
 static UniValue getmininginfo(const JSONRPCRequest& request)
@@ -302,7 +366,83 @@ static UniValue prioritisetransaction(const JSONRPCRequest& request)
     EnsureMemPool().PrioritiseTransaction(hash, nAmount);
     return true;
 }
+static UniValue blockToJSON(const CBlock& block)
+{
+    // Serialize passed information without accessing chain state of the active chain!
+    AssertLockNotHeld(cs_main); // For performance reasons
 
+    UniValue result(UniValue::VOBJ);
+    result.pushKV("hash", block.GetHash().GetHex());
+    result.pushKV("version", block.nVersion);
+    result.pushKV("versionHex", strprintf("%08x", block.nVersion));
+    result.pushKV("merkleroot", block.hashMerkleRoot.GetHex());
+    result.pushKV("merkleroot2", BlockMerkleRoot(block).GetHex());
+    UniValue txs(UniValue::VARR);
+    for(const auto& tx : block.vtx)
+    {
+        UniValue objTx(UniValue::VOBJ);
+        TxToUniv(*tx, uint256(), objTx, true, RPCSerializationFlags());
+        txs.push_back(objTx);
+    }
+    result.pushKV("tx", txs);
+    result.pushKV("time", block.GetBlockTime());
+    result.pushKV("nonce", (uint64_t)block.nNonce);
+    result.pushKV("bits", strprintf("%08x", block.nBits));
+    result.pushKV("target", arith_uint256().SetCompact(block.nBits).GetHex());
+    result.pushKV("previousblockhash", block.hashPrevBlock.GetHex());
+    return result;
+}
+static inline uint32_t be32dec(const void *pp)
+{
+	const uint8_t *p = (uint8_t const *)pp;
+	return ((uint32_t)(p[3]) + ((uint32_t)(p[2]) << 8) +
+	    ((uint32_t)(p[1]) << 16) + ((uint32_t)(p[0]) << 24));
+}
+static inline uint32_t le32dec(const void *pp)
+{
+	const uint8_t *p = (uint8_t const *)pp;
+	return ((uint32_t)(p[0]) + ((uint32_t)(p[1]) << 8) +
+	    ((uint32_t)(p[2]) << 16) + ((uint32_t)(p[3]) << 24));
+}
+static UniValue getwork(const JSONRPCRequest& request)
+{
+    auto& genesis = Params().GenesisBlock();
+    if (request.params.size() > 0) {
+        std::shared_ptr<CBlock> blockptr = std::make_shared<CBlock>();
+        CBlock& block = *blockptr;
+        if (!DecodeHexBlk(block, request.params[0].get_str())) {
+            throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Block decode failed");
+        }
+        std::cout << blockToJSON(block).write() << std::endl;
+        return true;
+    }
+
+    const CBlock* pblock = &genesis;
+    int32_t pdata[32];
+    pdata[0] = le32dec(&pblock->nVersion);
+	for (auto i = 0; i < 8; i++)
+		pdata[8 - i] = le32dec((int32_t*)(pblock->hashPrevBlock.begin()) + i);
+	for (auto i = 0; i < 8; i++)
+		pdata[9 + i] = le32dec((int32_t*)(pblock->hashMerkleRoot.begin()) + i);
+    pdata[17] = le32dec(&pblock->nTime);
+    pdata[18] = (pblock->nBits);
+	memset(pdata + 19, 0x00, 52);
+	pdata[20] = 0x80000000;
+	pdata[31] = 0x00000280;
+
+    UniValue result(UniValue::VOBJ);
+    result.pushKV("data", HexStr((char*)pdata, (char*)pdata+128));
+    arith_uint256 hashTarget = arith_uint256().SetCompact(pblock->nBits);
+    uint256 uh = ArithToUint256(hashTarget);
+    int32_t* hdata = (int32_t*)uh.begin();
+    int32_t target[8];
+    char*p = (char*)target;
+    for (auto i = 0; i < 8; i++)
+		target[i] = le32dec(hdata + i);
+    result.pushKV("target", HexStr(p, p+32));
+
+    return result;
+}
 
 // NOTE: Assumes a conclusive result; if result is inconclusive, it must be handled by caller
 static UniValue BIP22ValidationResult(const BlockValidationState& state)
@@ -334,6 +474,41 @@ static std::string gbt_vb_name(const Consensus::DeploymentPos pos) {
 
 static UniValue getblocktemplate(const JSONRPCRequest& request)
 {
+    static CScript scriptReward;
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    CWallet* const pwallet = wallet.get();
+
+    if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
+        return NullUniValue;
+    }
+
+    if (scriptReward.empty()) {
+        auto locked_chain = pwallet->chain().lock();
+        LOCK(pwallet->cs_wallet);
+        EnsureWalletIsUnlocked(pwallet);
+        CTxDestination address;
+
+        for (const std::pair<const CTxDestination, CAddressBookData>& item : pwallet->m_address_book) {
+            if (item.second.IsChange())
+                continue;
+            if (item.second.GetLabel() == "miner") {
+                auto& address = item.first;
+                scriptReward = GetScriptForDestination(address);
+                break;
+            }
+        }
+        if (scriptReward.empty()) {
+            CTxDestination address;
+            std::string error;
+            if (!pwallet->GetNewDestination(OutputType::LEGACY, "miner", address, error)) {
+                throw JSONRPCError(RPC_WALLET_KEYPOOL_RAN_OUT, error);
+            }
+            scriptReward = GetScriptForDestination(address);
+        }
+        if (scriptReward.empty())
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Can't get a valid miner address.");
+    }
+
             RPCHelpMan{"getblocktemplate",
                 "\nIf the request parameters include a 'mode' key, that is used to explicitly select between the default 'template' request or a 'proposal'.\n"
                 "It returns data needed to construct a block to work on.\n"
@@ -565,8 +740,8 @@ static UniValue getblocktemplate(const JSONRPCRequest& request)
         nStart = GetTime();
 
         // Create new block
-        CScript scriptDummy = CScript() << OP_TRUE;
-        pblocktemplate = BlockAssembler(mempool, Params()).CreateNewBlock(scriptDummy);
+        auto ticketTx = TryBuildTicketTx(wallet, pindexPrevNew->nHeight + 1);
+        pblocktemplate = BlockAssembler(mempool, Params()).CreateNewBlock(scriptReward, ticketTx);
         if (!pblocktemplate)
             throw JSONRPCError(RPC_OUT_OF_MEMORY, "Out of memory");
 
@@ -696,6 +871,9 @@ static UniValue getblocktemplate(const JSONRPCRequest& request)
     result.pushKV("previousblockhash", pblock->hashPrevBlock.GetHex());
     result.pushKV("transactions", transactions);
     result.pushKV("coinbaseaux", aux);
+    UniValue coinbasetxn(UniValue::VOBJ);
+    coinbasetxn.pushKV("data", EncodeHexTx(*pblock->vtx[0], SERIALIZE_TRANSACTION_NO_WITNESS));
+    result.pushKV("coinbasetxn", coinbasetxn);
     result.pushKV("coinbasevalue", (int64_t)pblock->vtx[0]->vout[0].nValue);
     result.pushKV("longpollid", ::ChainActive().Tip()->GetBlockHash().GetHex() + ToString(nTransactionsUpdatedLast));
     result.pushKV("target", hashTarget.GetHex());
@@ -766,6 +944,7 @@ static UniValue submitblock(const JSONRPCRequest& request)
     if (!DecodeHexBlk(block, request.params[0].get_str())) {
         throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Block decode failed");
     }
+    //std::cout << "submitblock:\n" << blockToJSON(block).write() << std::endl;
 
     if (block.vtx.empty() || !block.vtx[0]->IsCoinBase()) {
         throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Block does not start with a coinbase");
@@ -1032,6 +1211,7 @@ static const CRPCCommand commands[] =
   //  --------------------- ------------------------  -----------------------  ----------
     { "mining",             "getnetworkhashps",       &getnetworkhashps,       {"nblocks","height"} },
     { "mining",             "getmininginfo",          &getmininginfo,          {} },
+    { "mining",             "getwork",                &getwork,          {} },
     { "mining",             "prioritisetransaction",  &prioritisetransaction,  {"txid","dummy","fee_delta"} },
     { "mining",             "getblocktemplate",       &getblocktemplate,       {"template_request"} },
     { "mining",             "submitblock",            &submitblock,            {"hexdata","dummy"} },
