@@ -1234,16 +1234,16 @@ std::tuple<CAmount, CAmount> GetBlockCoinbaseOutValue(int nHeight, CAmount nSubs
 {
     double halvings = 1;
     if (nHeight < (1 * Params().SlotLength())) {
-        return {CAmount(nSubsidy), 0};
+        return std::make_tuple(CAmount(nSubsidy), 0);
     } else {
         halvings = 0.2;
     }
 
     if (withTicket) {
-        return {CAmount(nSubsidy), 0};
+        return std::make_tuple(CAmount(nSubsidy), 0);
     }
 
-    return {CAmount(nSubsidy * halvings), CAmount(nSubsidy - nSubsidy * halvings)};
+    return std::make_tuple(CAmount(nSubsidy * halvings), CAmount(nSubsidy - nSubsidy * halvings));
 }
 
 CoinsViews::CoinsViews(
