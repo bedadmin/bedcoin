@@ -107,7 +107,7 @@ public:
         m_assumed_blockchain_size = 320;
         m_assumed_chain_state_size = 4;
 
-        genesis = CreateGenesisBlock(1598112273, 1000000000, 0x1d00ffff, 1, 3150000 * COIN);
+        genesis = CreateGenesisBlock(1598112273, 1789897704, 0x1d00ffff, 1, 3150000 * COIN);
         while (!CheckProofOfWork(genesis.GetHash(), genesis.nBits, consensus)) {
             ++(genesis.nNonce);
             if (genesis.nNonce % 10000 == 0)
