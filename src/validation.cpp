@@ -2174,20 +2174,23 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
 
     bool withTicket = false;
     if (block.vtx.size() >= 2 && pindex->nHeight >= 2 * pticketview->SlotLength()) {
-        auto out = block.vtx[1]->vin[0].prevout;
-        if (block.vtx[0]->vin[0].scriptSig == CScript() << pindex->nHeight << ToByteVector(out.hash) << out.n << OP_0) {
+        auto& out = block.vtx[1]->vin[0].prevout;
+        auto expect = CScript() << pindex->nHeight << ToByteVector(out.hash) << out.n << OP_0;
+        if (block.vtx[0]->vin[0].scriptSig.size() >= expect.size() &&
+            std::equal(expect.begin(), expect.end(), block.vtx[0]->vin[0].scriptSig.begin())) {
             LogPrint(BCLog::FIRESTONE, "%s: coinbase with firestone:%s:%d\n", __func__, out.hash.ToString(), out.n);
             //check ticket
+            CCoinsViewCache& coinsview = ::ChainstateActive().CoinsTip();
             auto index = (pindex->nHeight / pticketview->SlotLength()) - 1;
             for (auto ticket : pticketview->GetTicketsBySlotIndex(index)) {
                 if (*(ticket->out) == out) {
-                    CCoinsViewCache& coinsview = ::ChainstateActive().CoinsTip();
                     auto ticketInHeight = coinsview.AccessCoin(COutPoint(out)).nHeight;
                     auto index = pindex->nHeight / pticketview->SlotLength();
                     auto beg = std::max((index - 1) * pticketview->SlotLength(), 0);
                     auto end = index * pticketview->SlotLength() - 1;
                     if (ticketInHeight >= beg && ticketInHeight <= end) {
                         withTicket = true;
+                        break;
                         LogPrint(BCLog::FIRESTONE, "%s: coinbase with firestone:%s:%d\n", __func__, ticket->out->hash.ToString(), ticket->out->n);
                     } else {
                         LogPrint(BCLog::FIRESTONE, "%s: firestone locktime error firestone:%s:%d\n", __func__, ticket->out->hash.ToString(), ticket->out->n);

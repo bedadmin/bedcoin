@@ -122,7 +122,7 @@ static CTransactionRef TryBuildTicketTx(std::shared_ptr<CWallet> wallet, int32_t
         LOCK2(pwallet->cs_wallet, spk_man.cs_KeyStore);
         EnsureWalletIsUnlocked(pwallet);
         for (auto& ticket : tickets) {
-            auto&& keyid = ticket->KeyID();
+            auto keyid = ticket->KeyID();
             if (! coinsview.AccessCoin(*(ticket->out)).IsSpent() && spk_man.HaveKey(keyid)) {
                 ticketToUse = ticket;
                 spk_man.GetKey(keyid, vchSecret);

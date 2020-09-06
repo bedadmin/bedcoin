@@ -53,7 +53,7 @@ static CBlock CreateGenesisBlock(uint32_t nTime, uint32_t nNonce, uint32_t nBits
 {
     const char* pszTimestamp = "Bit Ecological Digital Currency Systeam";
     auto&& vgenesisOutputScript = ParseHex("001441c6817563825a4a0127235299f6e476e2472610");
-    auto&& genesisOutputScript = CScript(vgenesisOutputScript.begin(), vgenesisOutputScript.end());
+    auto genesisOutputScript = CScript(vgenesisOutputScript.begin(), vgenesisOutputScript.end());
     return CreateGenesisBlock(pszTimestamp, genesisOutputScript, nTime, nNonce, nBits, nVersion, genesisReward);
 }
 bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params& params);
