@@ -108,13 +108,7 @@ public:
         m_assumed_chain_state_size = 4;
 
         genesis = CreateGenesisBlock(1598112273, 1789897704, 0x1d00ffff, 1, 3150000 * COIN);
-        while (!CheckProofOfWork(genesis.GetHash(), genesis.nBits, consensus)) {
-            ++(genesis.nNonce);
-            if (genesis.nNonce % 10000 == 0)
-                std::cout << genesis.nNonce << "-------------------------" << genesis.GetHash().GetHex() << std::endl;
-        }
         consensus.hashGenesisBlock = genesis.GetHash();
-        std::cout << genesis.nNonce << "-------------------------" << consensus.hashGenesisBlock.GetHex() << std::endl;
         //assert(consensus.hashGenesisBlock == uint256S("0x000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"));
         //assert(genesis.hashMerkleRoot == uint256S("0x4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"));
 

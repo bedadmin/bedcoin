@@ -974,8 +974,8 @@
         <translation>不能在矿票周期的最后一块购买矿票</translation>
     </message>
     <message>
-        <source>Can&apos;t buy ticket on on 0 ~ 4 slots.</source>
-        <translation type="vanished">不能在矿票周期(0 ~ 4)购买矿票</translation>
+        <source>Can&apos;t buy ticket on on 0 ~ 1 slots.</source>
+        <translation type="vanished">不能在矿票周期(0 ~ 1)购买矿票</translation>
     </message>
     <message>
         <source>Buy ticket success!</source>
@@ -998,12 +998,16 @@
         <translation>此地址中没有矿票.</translation>
     </message>
     <message>
-        <source>Failed to free ticket, something unexpected happened...</source>
-        <translation>释放矿票失败, 发生了一些错误...</translation>
+        <source>Failed to free ticket, something unexpected happened... %1</source>
+        <translation>释放矿票失败, 发生了一些错误... %1</translation>
     </message>
     <message>
-        <source>Failed to broadcast transation!</source>
-        <translation>广播交易失败.</translation>
+        <source>No expired ticket found.</source>
+        <translation>没有过期可释放的矿票</translation>
+    </message>
+    <message>
+        <source>Failed to broadcast transation! %1</source>
+        <translation>广播交易失败: %1</translation>
     </message>
     <message>
         <source>Released %1 ticket(s)</source>

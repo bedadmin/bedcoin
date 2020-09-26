@@ -253,7 +253,6 @@ void TicketPage::on_btnRelease_clicked()
       return;
     }
 
-    UniValue results(UniValue::VOBJ);
     std::map<uint256,std::pair<int,CScript>> txScriptInputs;
     std::vector<CTxOut> outs;
     UniValue ticketids(UniValue::VARR);
@@ -277,11 +276,15 @@ void TicketPage::on_btnRelease_clicked()
         outs.push_back(prevTx->vout[n]);
       }
     }
-    results.pushKV("OutPoint", ticketids);
 
     CKey vchSecret;
     if (!_walletModel->wallet().getPrivKey(relID, vchSecret)) {
         QMessageBox::critical(this, windowTitle(), tr("Failed to free ticket, something unexpected happened... %1").arg("Can't get Private Key"), QMessageBox::Ok, QMessageBox::Ok);
+        return;
+    }
+    if (txScriptInputs.empty()) {
+        QMessageBox::critical(this, windowTitle(), tr("No expired ticket found."), QMessageBox::Ok, QMessageBox::Ok);
+        return;
     }
     auto tx = _walletModel->wallet().createTicketAllSpendTx(txScriptInputs, outs, refundDest, vchSecret);
 

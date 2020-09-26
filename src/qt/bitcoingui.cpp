@@ -529,6 +529,7 @@ void BitcoinGUI::createToolBars()
         toolbar->addAction(sendCoinsAction);
         toolbar->addAction(receiveCoinsAction);
         toolbar->addAction(historyAction);
+        toolbar->addAction(ticketAction);
         overviewAction->setChecked(true);
 
 #ifdef ENABLE_WALLET
