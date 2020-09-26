@@ -2178,7 +2178,7 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
         auto expect = CScript() << pindex->nHeight << ToByteVector(out.hash) << out.n << OP_0;
         if (block.vtx[0]->vin[0].scriptSig.size() >= expect.size() &&
             std::equal(expect.begin(), expect.end(), block.vtx[0]->vin[0].scriptSig.begin())) {
-            LogPrint(BCLog::FIRESTONE, "%s: coinbase with firestone:%s:%d\n", __func__, out.hash.ToString(), out.n);
+            LogPrint(BCLog::TICKET, "%s: coinbase with ticket:%s:%d\n", __func__, out.hash.ToString(), out.n);
             //check ticket
             CCoinsViewCache& coinsview = ::ChainstateActive().CoinsTip();
             auto index = (pindex->nHeight / pticketview->SlotLength()) - 1;
@@ -2191,9 +2191,9 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
                     if (ticketInHeight >= beg && ticketInHeight <= end) {
                         withTicket = true;
                         break;
-                        LogPrint(BCLog::FIRESTONE, "%s: coinbase with firestone:%s:%d\n", __func__, ticket->out->hash.ToString(), ticket->out->n);
+                        LogPrint(BCLog::TICKET, "%s: coinbase with ticket:%s:%d\n", __func__, ticket->out->hash.ToString(), ticket->out->n);
                     } else {
-                        LogPrint(BCLog::FIRESTONE, "%s: firestone locktime error firestone:%s:%d\n", __func__, ticket->out->hash.ToString(), ticket->out->n);
+                        LogPrint(BCLog::TICKET, "%s: ticket locktime error ticket:%s:%d\n", __func__, ticket->out->hash.ToString(), ticket->out->n);
                     }
                 }
             }
@@ -5199,7 +5199,7 @@ bool TestTicket(const int height, const CTicketRef ticket)
 
 bool LoadTicketView()
 {
-    LogPrintf("%s: Load FireStones from block database...\n", __func__);
+    LogPrintf("%s: Load Tickets from block database...\n", __func__);
     for (auto i = 0; i <= ::ChainActive().Height(); i++) {
         try {
             if (!pticketview->LoadTicketFromDisk(i))

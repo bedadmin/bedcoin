@@ -32,6 +32,7 @@
     <ClCompile Include="..\..\src\qt\optionsdialog.cpp" />
     <ClCompile Include="..\..\src\qt\optionsmodel.cpp" />
     <ClCompile Include="..\..\src\qt\overviewpage.cpp" />
+    <ClCompile Include="..\..\src\qt\ticketpage.cpp" />
     <ClCompile Include="..\..\src\qt\paymentserver.cpp" />
     <ClCompile Include="..\..\src\qt\peertablemodel.cpp" />
     <ClCompile Include="..\..\src\qt\platformstyle.cpp" />
@@ -84,6 +85,7 @@
     <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_optionsdialog.cpp" />
     <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_optionsmodel.cpp" />
     <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_overviewpage.cpp" />
+    <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_ticketpage.cpp" />
     <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_paymentserver.cpp" />
     <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_peertablemodel.cpp" />
     <ClCompile Include="$(GeneratedFilesOutDir)\moc\moc_platformstyle.cpp" />
@@ -151,6 +153,7 @@
     <QT_MOC Include="..\..\src\qt\bitcoinamountfield.cpp" />
     <QT_MOC Include="..\..\src\qt\intro.cpp" />
     <QT_MOC Include="..\..\src\qt\overviewpage.cpp" />
+    <QT_MOC Include="..\..\src\qt\ticketpage.cpp" />
     <QT_MOC Include="..\..\src\qt\rpcconsole.cpp" />
     <MocHeaderFiles Include="..\..\src\qt\*.h" />
     <ResourceTemplates Include="..\..\src\qt\*.qrc" />

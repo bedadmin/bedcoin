@@ -8,6 +8,8 @@
 #include <qt/bitcoinunits.h>
 #include <qt/qvalidatedlineedit.h>
 #include <qt/sendcoinsrecipient.h>
+#include <qt/walletmodel.h>
+#include <qt/optionsmodel.h>
 
 #include <base58.h>
 #include <chainparams.h>
@@ -830,6 +832,12 @@ QString formatBytes(uint64_t bytes)
         return QString(QObject::tr("%1 MB")).arg(bytes / 1024 / 1024);
 
     return QString(QObject::tr("%1 GB")).arg(bytes / 1024 / 1024 / 1024);
+}
+
+QString formatPrice(WalletModel& wallet, CAmount price)
+{
+    int unit = wallet.getOptionsModel()->getDisplayUnit();
+    return BitcoinUnits::formatWithUnit(unit, price, false, BitcoinUnits::separatorAlways);
 }
 
 qreal calculateIdealFontSize(int width, const QString& text, QFont font, qreal minPointSize, qreal font_size) {

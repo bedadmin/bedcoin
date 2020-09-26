@@ -271,6 +271,13 @@ void BitcoinGUI::createActions()
     historyAction->setShortcut(QKeySequence(Qt::ALT + Qt::Key_4));
     tabGroup->addAction(historyAction);
 
+    ticketAction = new QAction(platformStyle->SingleColorIcon(":/icons/ticket"), tr("Ticket"), this);
+    ticketAction->setStatusTip(tr("Ticket Information"));
+    ticketAction->setToolTip(ticketAction->statusTip());
+    ticketAction->setCheckable(true);
+    ticketAction->setShortcut(QKeySequence(Qt::ALT + Qt::Key_6));
+    tabGroup->addAction(ticketAction);
+
 #ifdef ENABLE_WALLET
     // These showNormalIfMinimized are needed because Send Coins and Receive Coins
     // can be triggered from the tray menu, and need to show the GUI to be useful.
@@ -286,6 +293,7 @@ void BitcoinGUI::createActions()
     connect(receiveCoinsMenuAction, &QAction::triggered, this, &BitcoinGUI::gotoReceiveCoinsPage);
     connect(historyAction, &QAction::triggered, [this]{ showNormalIfMinimized(); });
     connect(historyAction, &QAction::triggered, this, &BitcoinGUI::gotoHistoryPage);
+    connect(ticketAction, &QAction::triggered, this, &BitcoinGUI::gotoTicketPage);
 #endif // ENABLE_WALLET
 
     quitAction = new QAction(tr("E&xit"), this);
@@ -854,6 +862,13 @@ void BitcoinGUI::gotoVerifyMessageTab(QString addr)
 {
     if (walletFrame) walletFrame->gotoVerifyMessageTab(addr);
 }
+
+void BitcoinGUI::gotoTicketPage()
+{
+    ticketAction->setChecked(true);
+    if (walletFrame) walletFrame->gotoTicketPage();
+}
+
 #endif // ENABLE_WALLET
 
 void BitcoinGUI::updateNetworkState()

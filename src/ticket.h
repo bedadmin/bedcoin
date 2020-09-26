@@ -17,9 +17,9 @@ bool GetRedeemFromScript(const CScript script, CScript& redeemscript);
 
 class COutPoint;
 /**
- * A firestone entry.
- * One firestone is mapping into one transaction, which has redeemScript.
- * It means firestone should include:
+ * A ticket entry.
+ * One ticket is mapping into one transaction, which has redeemScript.
+ * It means ticket should include:
  *   IN : this transaction's outpoint, which points to the ticket,
  *   OUT: nValue and scriptPubkey.
  */
@@ -67,7 +67,7 @@ class CBlock;
 typedef std::function<bool(const int, const CTicketRef&)> CheckTicketFunc;
 
 /** 
- * Abstract view on the firestone dataset. 
+ * Abstract view on the ticket dataset. 
  */
 class CTicketView : public CDBWrapper {
 public: 
@@ -77,24 +77,24 @@ public:
     
     /** 
      * ConnectBlock is an up-layer api, which is called by ConnectTip.
-     * @param[in]    height       the block height, at which this firestone appears.
-     * @param[out]   blk          the block, at which this firestone appears.
-     * @param[in]    checkTicket  the function, which is used to check the firestone whether valid.
+     * @param[in]    height       the block height, at which this ticket appears.
+     * @param[out]   blk          the block, at which this ticket appears.
+     * @param[in]    checkTicket  the function, which is used to check the ticket whether valid.
      */
     void ConnectBlock(const int height, const CBlock &blk, CheckTicketFunc checkTicket);
 
     void DisconnectBlock(const int height, const CBlock &blk);
     
     /** 
-     * Show the current firestone price.
-     * @return   the current firestone price.
+     * Show the current ticket price.
+     * @return   the current ticket price.
      */
     CAmount CurrentTicketPrice() const;
 
     std::vector<CTicketRef>& CurrentSlotTicket();
     
     /** 
-     * Find all firestone owned by the KeyID.
+     * Find all ticket owned by the KeyID.
      */
     std::vector<CTicketRef>& FindTickets(const CKeyID& key);
 
@@ -113,13 +113,13 @@ public:
     /** 
      * 0 slot's locktime is 2047.
      * @param[in]  index, the slot index calculated by height/slotlength.
-     * @return   the current lockheight, beyond which the firestone is USEABLE.
+     * @return   the current lockheight, beyond which the ticket is USEABLE.
      */
     const int LockTime(const int index);
     
     /** 
-     * Load the firestone set at height.
-     * @param[in]   height, the block height, from which firestones are load.
+     * Load the ticket set at height.
+     * @param[in]   height, the block height, from which tickets are load.
      */
     bool LoadTicketFromDisk(const int height);
 
@@ -129,12 +129,12 @@ private:
     bool WriteTicketsToDisk(const int height, const std::vector<CTicket> &tickets);
     
     /** 
-     * Update the firestone price, by +5% or -5% one slot.
+     * Update the ticket price, by +5% or -5% one slot.
      * In default case, the slot length is 2048, so the input height is used to calculate
      * The slot:
      *             slot = height / slotlength.
      * 
-     * When the last slot has more than slotlength firestones, the price is update:
+     * When the last slot has more than slotlength tickets, the price is update:
      *                      Price *= 1.05;
      * On the other hand:
      *                      Price *= 0.95;
@@ -142,7 +142,7 @@ private:
     void updateTicketPrice(const int height);
 
 private:
-    /** This map records firestones in each slot, one slot is 2048 blocks.*/
+    /** This map records tickets in each slot, one slot is 2048 blocks.*/
     std::map<int, std::vector<CTicketRef>> ticketsInSlot;
     std::map<CKeyID, std::vector<CTicketRef>> ticketsInAddr;
     CAmount ticketPrice;

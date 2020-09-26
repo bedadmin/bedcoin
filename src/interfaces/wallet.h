@@ -11,6 +11,7 @@
 #include <support/allocators/secure.h> // For SecureString
 #include <ui_interface.h>              // For ChangeType
 #include <util/message.h>
+#include <interfaces/chain.h>
 
 #include <functional>
 #include <map>
@@ -85,6 +86,8 @@ public:
     //! Get public key.
     virtual bool getPubKey(const CScript& script, const CKeyID& address, CPubKey& pub_key) = 0;
 
+    virtual bool getPrivKey(const CKeyID& keyid, CKey& vchSecret) = 0;
+
     //! Sign message
     virtual SigningResult signMessage(const std::string& message, const PKHash& pkhash, std::string& str_sig) = 0;
 
@@ -142,6 +145,11 @@ public:
     virtual void commitTransaction(CTransactionRef tx,
         WalletValueMap value_map,
         WalletOrderForm order_form) = 0;
+
+    virtual bool broadcastTransaction(const CTransactionRef& tx,
+        const CAmount& max_tx_fee,
+        bool relay,
+        std::string& err_string) = 0;
 
     //! Return whether transaction can be abandoned.
     virtual bool transactionCanBeAbandoned(const uint256& txid) = 0;
@@ -297,6 +305,13 @@ public:
     //! Register handler for keypool changed messages.
     using CanGetAddressesChangedFn = std::function<void()>;
     virtual std::unique_ptr<Handler> handleCanGetAddressesChanged(CanGetAddressesChangedFn fn) = 0;
+
+    virtual CTransactionRef sendMoneyWithOpRet(Chain::Lock& locked_chain, const CTxDestination& address, 
+                                               CAmount nValue, bool fSubtractFeeFromAmount, const CScript& optScritp, 
+                                               const CCoinControl& coin_control) = 0;
+    virtual void doWithChainAndWalletLock(std::function<void (std::unique_ptr<Chain::Lock>&, Wallet&)>) = 0;
+    virtual CTransactionRef createTicketAllSpendTx(std::map<uint256,std::pair<int,CScript>> txScriptInputs,
+                                                   std::vector<CTxOut> outs, CTxDestination& dest, CKey& key) = 0;
 };
 
 //! Information about one wallet address.

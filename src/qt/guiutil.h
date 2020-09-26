@@ -20,6 +20,7 @@
 
 class QValidatedLineEdit;
 class SendCoinsRecipient;
+class WalletModel;
 
 namespace interfaces
 {
@@ -211,6 +212,8 @@ namespace GUIUtil
     QString formatNiceTimeOffset(qint64 secs);
 
     QString formatBytes(uint64_t bytes);
+
+    QString formatPrice(WalletModel& wallet, CAmount price);
 
     qreal calculateIdealFontSize(int width, const QString& text, QFont font, qreal minPointSize = 4, qreal startPointSize = 14);
 

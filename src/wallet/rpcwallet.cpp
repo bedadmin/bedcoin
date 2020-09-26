@@ -4270,7 +4270,7 @@ static UniValue getaddresstickets(const JSONRPCRequest& request)
             "Optionally filter to only include txouts paid to specified addresses.\n",
             {
 				{"address", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "address"},
-                {"all", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "wether show all firestone."},
+                {"all", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "wether show all ticket."},
             },
             RPCResult{
                 RPCResult::Type::ARR, "", "",
@@ -4358,12 +4358,12 @@ static UniValue listtickets(const JSONRPCRequest& request)
     }
 
         RPCHelpMan{"listtickets",
-        "\nReturns array of unspent firestone\n"
+        "\nReturns array of unspent ticket\n"
         "with between minconf and maxconf (inclusive) confirmations.\n"
         "Optionally filter to only include txouts paid to specified addresses.\n",
         {
             {"index", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "slot index."},
-            {"all", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "wether show all firestone."},
+            {"all", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "wether show all ticket."},
         },
         RPCResult{
             RPCResult::Type::ARR, "", "",
@@ -4489,9 +4489,9 @@ UniValue buyticket(const JSONRPCRequest& request)
 
             RPCHelpMan{
                 "buyticket",
-                "\nFreeze some funds to get miner fs\n",
+                "\nFreeze some funds to get miner ticket\n",
                 {
-                    {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "The address to recvie fs(only keyid)."},
+                    {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "The address to recvie ticket(only keyid)."},
                     {"changeAddr", RPCArg::Type::STR, RPCArg::Optional::NO, "The address to recvie FML change(only keyid)."},
                 },
                 RPCResult{
@@ -4533,11 +4533,11 @@ UniValue buyticket(const JSONRPCRequest& request)
     LOCK(cs_main);
     auto locktime = pticketview->LockTime();
     if (locktime == ::ChainActive().Height()) {
-        throw JSONRPCError(RPC_VERIFY_REJECTED, "Can't buy firestone on slot's last block.");
+        throw JSONRPCError(RPC_VERIFY_REJECTED, "Can't buy ticket on slot's last block.");
     }
     
     if (pticketview->SlotIndex() < 1) {
-        throw JSONRPCError(RPC_INVALID_PARAMETER, "Can't buy firestone on 0 ~ 4 slots.");
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Can't buy ticket on 0 ~ 1 slots.");
     }
     
     auto nAmount = pticketview->CurrentTicketPrice();
@@ -4545,7 +4545,7 @@ UniValue buyticket(const JSONRPCRequest& request)
     dest = CTxDestination(ScriptHash(CScriptID(redeemScript)));
     auto scriptPubkey = GetScriptForDestination(dest);
     auto opRetScript = CScript() << OP_RETURN << CTicket::VERSION << ToByteVector(redeemScript);
-    LogPrint(BCLog::FIRESTONE, "%s: locktime:%d, nAmount:%d\n", __func__, locktime, nAmount);
+    LogPrint(BCLog::TICKET, "%s: locktime:%d, nAmount:%d\n", __func__, locktime, nAmount);
     
     //set change dest
     CCoinControl coin_control;
@@ -4913,7 +4913,7 @@ UniValue freeaddresstickets(const JSONRPCRequest& request){
 	UniValue results(UniValue::VOBJ);
     if (tickets.size() == 0){
         // return txid, all overdue ticketid
-        results.pushKV("ATTENTION:","YOUR ADDRESS HAS NO FIRESTONES!");
+        results.pushKV("ATTENTION:","YOUR ADDRESS HAS NO TICKETS!");
         return results;
     }
 

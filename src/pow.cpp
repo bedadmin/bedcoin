@@ -34,6 +34,8 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
                 return pindex->nBits;
             }
         }
+        if (pindexLast->nBits > nProofOfWorkLimit)
+            return nProofOfWorkLimit;
         return pindexLast->nBits;
     }
 

@@ -124,6 +124,17 @@ public:
         }
         return false;
     }
+
+    bool getPrivKey(const CKeyID& keyid, CKey& vchSecret) {
+        auto spk_man = m_wallet->GetLegacyScriptPubKeyMan();
+        if (spk_man) {
+            auto locked_chain = m_wallet->chain().lock();
+            LOCK2(m_wallet->cs_wallet, spk_man->cs_KeyStore);
+            return spk_man->GetKey(keyid, vchSecret);
+        }
+        return false;
+    }
+
     SigningResult signMessage(const std::string& message, const PKHash& pkhash, std::string& str_sig) override
     {
         return m_wallet->SignMessage(message, pkhash, str_sig);
@@ -241,6 +252,15 @@ public:
         LOCK(m_wallet->cs_wallet);
         m_wallet->CommitTransaction(std::move(tx), std::move(value_map), std::move(order_form));
     }
+
+    bool broadcastTransaction(const CTransactionRef& tx,
+        const CAmount& max_tx_fee,
+        bool relay,
+        std::string& err_string)
+    {
+        return m_wallet->chain().broadcastTransaction(tx, max_tx_fee, relay, err_string);
+    }
+
     bool transactionCanBeAbandoned(const uint256& txid) override { return m_wallet->TransactionCanBeAbandoned(txid); }
     bool abandonTransaction(const uint256& txid) override
     {
@@ -499,6 +519,25 @@ public:
         return MakeHandler(m_wallet->NotifyCanGetAddressesChanged.connect(fn));
     }
 
+    virtual void doWithChainAndWalletLock(std::function<void (std::unique_ptr<Chain::Lock>&, Wallet&)> cb) override {
+        auto locked_chain = m_wallet->chain().lock(true);
+        LOCK(m_wallet->cs_wallet);
+        cb(locked_chain, *this);
+    }
+
+    virtual CTransactionRef createTicketAllSpendTx(
+        std::map<uint256,std::pair<int,CScript>> txScriptInputs,
+        std::vector<CTxOut> outs, CTxDestination& dest, CKey& key) override {
+        return ::CreateTicketAllSpendTx(m_wallet.get(), txScriptInputs, outs, dest, key);
+    }
+
+    CTransactionRef sendMoneyWithOpRet(interfaces::Chain::Lock& locked_chain, const CTxDestination& address,
+                                       CAmount nValue, bool fSubtractFeeFromAmount, const CScript& optScritp,
+                                       const CCoinControl& coin_control) override {
+        mapValue_t mapValue;
+        return ::SendMoneyWithOpRet(locked_chain, m_wallet.get(), address, nValue, fSubtractFeeFromAmount, optScritp, coin_control, std::move(mapValue));
+    }
+    
     std::shared_ptr<CWallet> m_wallet;
 };
 

@@ -178,7 +178,7 @@ static std::vector<CTicketRef> dummyTickets;
 
 void CTicketView::ConnectBlock(const int height, const CBlock &blk, CheckTicketFunc checkTicket)
 {
-    LogPrint(BCLog::FIRESTONE, "%s: height:%d\n", __func__, height);
+    LogPrint(BCLog::TICKET, "%s: height:%d\n", __func__, height);
     updateTicketPrice(height);
     std::vector<CTicket> tickets;
     for (auto tx : blk.vtx) {        
@@ -186,24 +186,24 @@ void CTicketView::ConnectBlock(const int height, const CBlock &blk, CheckTicketF
             continue;
         auto ticket = tx->Ticket();
         if( !checkTicket(height, ticket)) {
-            LogPrint(BCLog::FIRESTONE, "%s: CheckTicket failure, hash:%s:%d\n", __func__, ticket->out->hash.ToString(), ticket->out->n);
+            LogPrint(BCLog::TICKET, "%s: CheckTicket failure, hash:%s:%d\n", __func__, ticket->out->hash.ToString(), ticket->out->n);
             continue;
         }
         tickets.emplace_back(*ticket);
         ticketsInSlot[slotIndex].emplace_back(ticket);
         ticketsInAddr[ticket->KeyID()].emplace_back(ticket);
-        LogPrint(BCLog::FIRESTONE, "%s: detected a new firestone, height:%d, hash:%s:%d\n", __func__, height, ticket->out->hash.ToString(), ticket->out->n);
+        LogPrint(BCLog::TICKET, "%s: detected a new ticket, height:%d, hash:%s:%d\n", __func__, height, ticket->out->hash.ToString(), ticket->out->n);
     } 
     if (tickets.size() > 0) {
         if (!WriteTicketsToDisk(height, tickets)) {
-            LogPrint(BCLog::FIRESTONE, "%s: WriteTicketsToDisk retrun false, height:%d\n", __func__, height);
+            LogPrint(BCLog::TICKET, "%s: WriteTicketsToDisk retrun false, height:%d\n", __func__, height);
         }
     }
 }
 
 void CTicketView::DisconnectBlock(const int height, const CBlock &blk)
 {
-    LogPrint(BCLog::FIRESTONE, "%s: height:%d, block:%s\n", __func__, height, blk.GetHash().ToString());
+    LogPrint(BCLog::TICKET, "%s: height:%d, block:%s\n", __func__, height, blk.GetHash().ToString());
     auto key = std::make_pair(DB_TICKET_HEIGHT_KEY, height);
     Erase(key, true);
     ticketsInSlot.clear();
@@ -276,7 +276,7 @@ bool CTicketView::LoadTicketFromDisk(const int height)
     if (Exists(key)) {
         std::vector<CTicket> tickets;
         if (!Read(key, tickets)) {
-            LogPrint(BCLog::FIRESTONE, "%s: Read retrun false, height:%d\n", __func__, height);
+            LogPrint(BCLog::TICKET, "%s: Read retrun false, height:%d\n", __func__, height);
             return false;
         }
         for (auto ticket : tickets) {
@@ -317,6 +317,6 @@ void CTicketView::updateTicketPrice(const int height)
         }
         ticketPrice = slotIndex > 1 ? ticketPrice : BaseTicketPrice;
         slotIndex = int(height / len);
-        LogPrint(BCLog::FIRESTONE, "%s: updata ticket slot, index:%d, price:%d, prevSlotTicketCount:%d\n", __func__, slotIndex, ticketPrice, prevSlotTicketSize);
+        LogPrint(BCLog::TICKET, "%s: updata ticket slot, index:%d, price:%d, prevSlotTicketCount:%d\n", __func__, slotIndex, ticketPrice, prevSlotTicketSize);
     }
 }
