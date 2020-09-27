@@ -2,8 +2,8 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-bin_PROGRAMS += qt/bedcoin-qt
-EXTRA_LIBRARIES += qt/libbedcoinqt.a
+bin_PROGRAMS += qt/bitcoin-qt
+EXTRA_LIBRARIES += qt/libbitcoinqt.a
 
 # bitcoin qt core #
 include Makefile.qt_locale.include
