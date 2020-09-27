@@ -6,6 +6,7 @@
     <ProjectGuid>{7E99172D-7FF2-4CB6-B736-AC9B76ED412A}</ProjectGuid>
     <ConfigurationType>Application</ConfigurationType>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
+    <ProjectName>bedcoin-qt</ProjectName>
   </PropertyGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\qt\main.cpp" />

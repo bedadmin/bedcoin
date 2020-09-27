@@ -66,12 +66,12 @@
         <translation>接收地址</translation>
     </message>
     <message>
-        <source>These are your Bitcoin addresses for sending payments. Always check the amount and the receiving address before sending coins.</source>
-        <translation>这些是你的比特币支付地址。在发送之前，一定要核对金额和接收地址。</translation>
+        <source>These are your Bedcoin addresses for sending payments. Always check the amount and the receiving address before sending coins.</source>
+        <translation>这些是你的Bedcoin支付地址。在发送之前，一定要核对金额和接收地址。</translation>
     </message>
     <message>
-        <source>These are your Bitcoin addresses for receiving payments. Use the 'Create new receiving address' button in the receive tab to create new addresses.</source>
-        <translation>这些是您的比特币接收地址。建议每个交易使用一个新的接收地址。</translation>
+        <source>These are your Bedcoin addresses for receiving payments. Use the 'Create new receiving address' button in the receive tab to create new addresses.</source>
+        <translation>这些是您的Bedcoin接收地址。建议每个交易使用一个新的接收地址。</translation>
     </message>
     <message>
         <source>&amp;Copy Address</source>
@@ -169,7 +169,7 @@
     </message>
     <message>
         <source>Warning: If you encrypt your wallet and lose your passphrase, you will &lt;b&gt;LOSE ALL OF YOUR BITCOINS&lt;/b&gt;!</source>
-        <translation>注意：如果你加密了钱包，丢失了密码，您将&lt;b&gt;丢失所有的比特币。</translation>
+        <translation>注意：如果你加密了钱包，丢失了密码，您将&lt;b&gt;丢失所有的Bedcoin。</translation>
     </message>
     <message>
         <source>Are you sure you wish to encrypt your wallet?</source>
@@ -188,8 +188,8 @@
         <translation>输入钱包的旧密码和新密码。</translation>
     </message>
     <message>
-        <source>Remember that encrypting your wallet cannot fully protect your bitcoins from being stolen by malware infecting your computer.</source>
-        <translation>记住，加密您的钱包并不能完全保护您的比特币不被您电脑中的恶意软件窃取。</translation>
+        <source>Remember that encrypting your wallet cannot fully protect your bedcoins from being stolen by malware infecting your computer.</source>
+        <translation>记住，加密您的钱包并不能完全保护您的Bedcoin不被您电脑中的恶意软件窃取。</translation>
     </message>
     <message>
         <source>Wallet to be encrypted</source>
@@ -358,8 +358,8 @@
         <translation>启用代理:%1</translation>
     </message>
     <message>
-        <source>Send coins to a Bitcoin address</source>
-        <translation>发送比特币到一个比特币地址</translation>
+        <source>Send coins to a Bedcoin address</source>
+        <translation>发送Bedcoin到一个Bedcoin地址</translation>
     </message>
     <message>
         <source>Backup wallet to another location</source>
@@ -394,12 +394,12 @@
         <translation>加密您的钱包私钥</translation>
     </message>
     <message>
-        <source>Sign messages with your Bitcoin addresses to prove you own them</source>
-        <translation>用您的比特币地址签名信息，以证明拥有它们</translation>
+        <source>Sign messages with your Bedcoin addresses to prove you own them</source>
+        <translation>用您的Bedcoin地址签名信息，以证明拥有它们</translation>
     </message>
     <message>
-        <source>Verify messages to ensure they were signed with specified Bitcoin addresses</source>
-        <translation>验证消息，确保它们是用指定的比特币地址签名的</translation>
+        <source>Verify messages to ensure they were signed with specified Bedcoin addresses</source>
+        <translation>验证消息，确保它们是用指定的Bedcoin地址签名的</translation>
     </message>
     <message>
         <source>&amp;File</source>
@@ -418,8 +418,8 @@
         <translation>标签工具栏</translation>
     </message>
     <message>
-        <source>Request payments (generates QR codes and bitcoin: URIs)</source>
-        <translation>请求支付(生成二维码和比特币链接)</translation>
+        <source>Request payments (generates QR codes and bedcoin: URIs)</source>
+        <translation>请求支付(生成二维码和Bedcoin链接)</translation>
     </message>
     <message>
         <source>Show the list of used sending addresses and labels</source>
@@ -434,8 +434,8 @@
         <translation>&amp;命令行选项</translation>
     </message>
     <message numerus="yes">
-        <source>%n active connection(s) to Bitcoin network</source>
-        <translation><numerusform>%n 活跃的链接到比特币网络</numerusform></translation>
+        <source>%n active connection(s) to Bedcoin network</source>
+        <translation><numerusform>%n 活跃的链接到Bedcoin网络</numerusform></translation>
     </message>
     <message>
         <source>Indexing blocks on disk...</source>
@@ -494,8 +494,8 @@
         <translation>&amp;接受地址</translation>
     </message>
     <message>
-        <source>Open a bitcoin: URI</source>
-        <translation>打开比特币: URI</translation>
+        <source>Open a bedcoin: URI</source>
+        <translation>打开Bedcoin: URI</translation>
     </message>
     <message>
         <source>Open Wallet</source>
@@ -514,8 +514,8 @@
         <translation>关闭钱包</translation>
     </message>
     <message>
-        <source>Show the %1 help message to get a list with possible Bitcoin command-line options</source>
-        <translation>显示%1帮助消息以获得可能包含Bitcoin命令行选项的列表</translation>
+        <source>Show the %1 help message to get a list with possible Bedcoin command-line options</source>
+        <translation>显示%1帮助消息以获得可能包含Bedcoin命令行选项的列表</translation>
     </message>
     <message>
         <source>default wallet</source>
@@ -618,8 +618,8 @@
         <translation>钱包是&lt;b&gt;加密的&lt;/b&gt;，目前&lt;b&gt;已锁定&lt;/b&gt;</translation>
     </message>
     <message>
-        <source>A fatal error occurred. Bitcoin can no longer continue safely and will quit.</source>
-        <translation>发生了致命错误。比特币无法继续安全运行，将退出。</translation>
+        <source>A fatal error occurred. Bedcoin can no longer continue safely and will quit.</source>
+        <translation>发生了致命错误。Bedcoin无法继续安全运行，将退出。</translation>
     </message>
 </context>
 <context>
@@ -834,8 +834,8 @@
         <translation>编辑发送地址</translation>
     </message>
     <message>
-        <source>The entered address "%1" is not a valid Bitcoin address.</source>
-        <translation>输入的地址"%1"不是有效的比特币地址。</translation>
+        <source>The entered address "%1" is not a valid Bedcoin address.</source>
+        <translation>输入的地址"%1"不是有效的Bedcoin地址。</translation>
     </message>
     <message>
         <source>Address "%1" already exists as a receiving address with label "%2" and so cannot be added as a sending address.</source>
@@ -911,8 +911,8 @@
         <translation>使用自定数据目录</translation>
     </message>
     <message>
-        <source>Bitcoin</source>
-        <translation>比特币</translation>
+        <source>Bedcoin</source>
+        <translation>Bedcoin</translation>
     </message>
     <message>
         <source>Error</source>
@@ -1204,8 +1204,8 @@ Note:  Since the fee is calculated on a per-byte basis, a fee of "100 satoshis p
         <translation>粉尘：</translation>
     </message>
     <message>
-        <source>When there is less transaction volume than space in the blocks, miners as well as relaying nodes may enforce a minimum fee. Paying only this minimum fee is just fine, but be aware that this can result in a never confirming transaction once there is more demand for bitcoin transactions than the network can process.</source>
-        <translation>当交易量小于块的空间时，矿工和中继节点可以强制执行最低费用。只付最低费用就可以了，但注意，一旦比特币交易的需求超出网络的处理能力，就可能导致交易无法确认。</translation>
+        <source>When there is less transaction volume than space in the blocks, miners as well as relaying nodes may enforce a minimum fee. Paying only this minimum fee is just fine, but be aware that this can result in a never confirming transaction once there is more demand for bedcoin transactions than the network can process.</source>
+        <translation>当交易量小于块的空间时，矿工和中继节点可以强制执行最低费用。只付最低费用就可以了，但注意，一旦Bedcoin交易的需求超出网络的处理能力，就可能导致交易无法确认。</translation>
     </message>
     <message>
         <source>A too low fee might result in a never confirming transaction (read the tooltip)</source>
@@ -1292,8 +1292,8 @@ Note:  Since the fee is calculated on a per-byte basis, a fee of "100 satoshis p
         <translation>支付请求已过期。</translation>
     </message>
     <message>
-        <source>Warning: Invalid Bitcoin address</source>
-        <translation>警告：比特币地址无效</translation>
+        <source>Warning: Invalid Bedcoin address</source>
+        <translation>警告：Bedcoin地址无效</translation>
     </message>
     <message>
         <source>The address you selected for change is not part of this wallet. Any or all funds in your wallet may be sent to this address. Are you sure?</source>
@@ -1315,12 +1315,12 @@ Note:  Since the fee is calculated on a per-byte basis, a fee of "100 satoshis p
         <translation>选择以前使用的地址</translation>
     </message>
     <message>
-        <source>The Bitcoin address to send the payment to</source>
-        <translation>支付到的比特币地址</translation>
+        <source>The Bedcoin address to send the payment to</source>
+        <translation>支付到的Bedcoin地址</translation>
     </message>
     <message>
-        <source>The fee will be deducted from the amount being sent. The recipient will receive less bitcoins than you enter in the amount field. If multiple recipients are selected, the fee is split equally.</source>
-        <translation>手续费将从发出的总额中扣除。接受者收到的比特币将少于你输入的金额字段。如果选择了多个接受者，手续费将平均分配。</translation>
+        <source>The fee will be deducted from the amount being sent. The recipient will receive less bedcoins than you enter in the amount field. If multiple recipients are selected, the fee is split equally.</source>
+        <translation>手续费将从发出的总额中扣除。接受者收到的Bedcoin将少于你输入的金额字段。如果选择了多个接受者，手续费将平均分配。</translation>
     </message>
     <message>
         <source>This is an unauthenticated payment request.</source>
@@ -1331,8 +1331,8 @@ Note:  Since the fee is calculated on a per-byte basis, a fee of "100 satoshis p
         <translation>输入此地址的标签，将其添加到使用的地址列表中</translation>
     </message>
     <message>
-        <source>A message that was attached to the bitcoin: URI which will be stored with the transaction for your reference. Note: This message will not be sent over the Bitcoin network.</source>
-        <translation>附在比特币上的消息:URI将与交易一起存储，供参考。注意：此信息不会通过比特币网络发送。</translation>
+        <source>A message that was attached to the bedcoin: URI which will be stored with the transaction for your reference. Note: This message will not be sent over the Bedcoin network.</source>
+        <translation>附在Bedcoin上的消息:URI将与交易一起存储，供参考。注意：此信息不会通过Bedcoin网络发送。</translation>
     </message>
     </context>
 <context>
@@ -1456,7 +1456,7 @@ Note:  Since the fee is calculated on a per-byte basis, a fee of "100 satoshis p
     </message>
     </context>
 <context>
-    <name>bitcoin-core</name>
+    <name>bedcoin-core</name>
     <message>
         <source>Transaction too large</source>
         <translation>超额转账</translation>

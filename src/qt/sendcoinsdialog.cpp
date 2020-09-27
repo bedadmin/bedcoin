@@ -190,7 +190,7 @@ void SendCoinsDialog::setModel(WalletModel *_model)
 
         if (model->wallet().privateKeysDisabled()) {
             ui->sendButton->setText(tr("Cr&eate Unsigned"));
-            ui->sendButton->setToolTip(tr("Creates a Partially Signed Bitcoin Transaction (PSBT) for use with e.g. an offline %1 wallet, or a PSBT-compatible hardware wallet.").arg(PACKAGE_NAME));
+            ui->sendButton->setToolTip(tr("Creates a Partially Signed Bedcoin Transaction (PSBT) for use with e.g. an offline %1 wallet, or a PSBT-compatible hardware wallet.").arg(PACKAGE_NAME));
         }
 
         // set the smartfee-sliders default value (wallets default conf.target or last stored value)
@@ -316,7 +316,7 @@ void SendCoinsDialog::on_sendButton_clicked()
 
     questionString.append("<br /><span style='font-size:10pt;'>");
     if (model->wallet().privateKeysDisabled()) {
-        questionString.append(tr("Please, review your transaction proposal. This will produce a Partially Signed Bitcoin Transaction (PSBT) which you can copy and then sign with e.g. an offline %1 wallet, or a PSBT-compatible hardware wallet.").arg(PACKAGE_NAME));
+        questionString.append(tr("Please, review your transaction proposal. This will produce a Partially Signed Bedcoin Transaction (PSBT) which you can copy and then sign with e.g. an offline %1 wallet, or a PSBT-compatible hardware wallet.").arg(PACKAGE_NAME));
     } else {
         questionString.append(tr("Please, review your transaction."));
     }
@@ -824,7 +824,7 @@ void SendCoinsDialog::coinControlChangeEdited(const QString& text)
         }
         else if (!IsValidDestination(dest)) // Invalid address
         {
-            ui->labelCoinControlChangeLabel->setText(tr("Warning: Invalid Bitcoin address"));
+            ui->labelCoinControlChangeLabel->setText(tr("Warning: Invalid Bedcoin address"));
         }
         else // Valid address
         {

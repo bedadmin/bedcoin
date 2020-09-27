@@ -100,9 +100,9 @@ static int AppInitRawTx(int argc, char* argv[])
 
     if (argc < 2 || HelpRequested(gArgs)) {
         // First part of help message is specific to this utility
-        std::string strUsage = PACKAGE_NAME " bitcoin-tx utility version " + FormatFullVersion() + "\n\n" +
-            "Usage:  bitcoin-tx [options] <hex-tx> [commands]  Update hex-encoded bitcoin transaction\n" +
-            "or:     bitcoin-tx [options] -create [commands]   Create hex-encoded bitcoin transaction\n" +
+        std::string strUsage = PACKAGE_NAME " bedcoin-tx utility version " + FormatFullVersion() + "\n\n" +
+            "Usage:  bedcoin-tx [options] <hex-tx> [commands]  Update hex-encoded bedcoin transaction\n" +
+            "or:     bedcoin-tx [options] -create [commands]   Create hex-encoded bedcoin transaction\n" +
             "\n";
         strUsage += gArgs.GetHelpMessage();
 
@@ -792,7 +792,7 @@ static int CommandLineRawTx(int argc, char* argv[])
             if (argc < 2)
                 throw std::runtime_error("too few parameters");
 
-            // param: hex-encoded bitcoin transaction
+            // param: hex-encoded bedcoin transaction
             std::string strHexTx(argv[1]);
             if (strHexTx == "-")                 // "-" implies standard input
                 strHexTx = readStdin();
