@@ -74,7 +74,7 @@ public:
         consensus.SegwitHeight = 0; // 0000000000000000001c8018d9cb3b742ef25114f27563e3fc4a1902167f9893
         consensus.MinBIP9WarningHeight = 0; // segwit activation height + miner confirmation window
         consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        //consensus.powLimit = uint256S("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        //consensus.powLimit = uint256S("0000000000000a24a10000000000000000000000000000000000000000000000"); // 11.84T + 10min
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
         consensus.nPowTargetSpacing = 10 * 60;
         consensus.fPowAllowMinDifficultyBlocks = false;
@@ -119,6 +119,10 @@ public:
         // release ASAP to avoid it where possible.
         vFixedSeeds.clear();
         vSeeds.clear();
+        vSeeds.emplace_back("seed1.bedcoin.cc");
+        vSeeds.emplace_back("seed2.bedcoin.cc");
+        vSeeds.emplace_back("seed3.bedcoin.cc");
+        vSeeds.emplace_back("seed4.bedcoin.cc");
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,0);
         base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,5);
