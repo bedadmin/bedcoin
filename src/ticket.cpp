@@ -173,7 +173,7 @@ bool CTicket::Invalid() const
 
 CAmount CTicketView::BaseTicketPrice = 500 * COIN;
 CAmount nSlotLowerBoundTickerPrice = 100 * COIN;
-static const char* DB_TICKET_LOCK_KEY = "LockCoin"
+static std::string DB_TICKET_LOCK_KEY = "LockCoin";
 static const char DB_TICKET_HEIGHT_KEY = 'H';
 
 static std::vector<CTicketRef> dummyTickets;
