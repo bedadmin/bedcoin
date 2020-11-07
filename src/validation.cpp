@@ -5208,5 +5208,6 @@ bool LoadTicketView()
             return error("%s: failure: %s", __func__, e.what());
         }
     }
+    pticketview->LoadLockedCoins();
     return true;
 }

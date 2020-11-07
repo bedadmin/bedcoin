@@ -4624,7 +4624,7 @@ UniValue freeticket(const JSONRPCRequest& request)
                 "freeticket",
                 "\nSpend frozen output to address.\n",
                 {
-                    {"ticketid", RPCArg::Type::STR, RPCArg::Optional::NO, "The transaction id."},
+                    {"txid", RPCArg::Type::STR, RPCArg::Optional::NO, "The transaction id."},
                     {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "The address to recvie."},
                 },
                 RPCResult{
@@ -4635,28 +4635,28 @@ UniValue freeticket(const JSONRPCRequest& request)
             }
     .Check(request);
 
-	auto ticketid = ParseHashV(request.params[0], "params 1");
-	CTicket ticket;
+	auto txid = ParseHashV(request.params[0], "txid");
+    auto prevTx = MakeTransactionRef();
+    uint256 hashBlock;
+    if (!GetTransaction(txid, prevTx, Params().GetConsensus(), hashBlock)) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "No such ticket.");
+    }
+
+    auto ticket = prevTx->Ticket();
+    if (ticket == nullptr){
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "ticket is invalid.");
+    }
+    auto redeemScript = ticket->redeemScript;
+    auto scriptPubkey = ticket->scriptPubkey;
+
     {
         LOCK(cs_main);
-        if (ticket.State(::ChainActive().Tip()->nHeight) != CTicket::CTicketState::OVERDUE){
+        if (ticket->State(::ChainActive().Tip()->nHeight) != CTicket::CTicketState::OVERDUE){
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "ticket is not overdue.");
         }
     }
 
-	auto txid = ticket.out->hash;
-	auto redeemScript = ticket.redeemScript;
-	auto scriptPubkey = ticket.scriptPubkey;
-
-    auto prevTx = MakeTransactionRef();
-    //LOCK(cs_main);
-    uint256 hashBlock;
-    if (!GetTransaction(txid, prevTx, Params().GetConsensus(), hashBlock)) {
-        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "No such gettransaction.");
-    }
-
     {
-        // check redeemScript
 		CScriptID scriptid;
 		auto ticketscript = scriptPubkey;
 		CScriptBase::const_iterator pc = ticketscript.begin();
@@ -4680,7 +4680,7 @@ UniValue freeticket(const JSONRPCRequest& request)
 		}
     }
 
-	auto n = ticket.out->n;
+	auto n = ticket->out->n;
     if (n < 0 || n >= prevTx->vout.size()) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid params");
     }
@@ -5002,6 +5002,227 @@ UniValue getslotinfo(const JSONRPCRequest& request)
     return obj;
 }
 
+UniValue lockcoin(const JSONRPCRequest& request)
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    CWallet* const pwallet = wallet.get();
+
+    if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
+        return NullUniValue;
+    }
+
+            RPCHelpMan{
+                "lockcoin",
+                "\nlock coin to an address\n",
+                {
+                    {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "The address to hold lock amound(only keyid)."},
+                    {"amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "The amount in " + CURRENCY_UNIT + " to send. eg 0.1"},
+                    {"height", RPCArg::Type::NUM, RPCArg::Optional::NO, "The lock height."},
+                },
+                RPCResult{
+                    RPCResult::Type::STR, "txid", "(string) The tx id."
+                },
+                RPCExamples{
+                    HelpExampleCli("lockcoin", "\"1M72Sfpbz1BPpXFHz9m3CdqATR44Jvaydd\" 100 100000")},
+            }
+    .Check(request);
+    if (::ChainstateActive().IsInitialBlockDownload()) {
+        throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "Block chain downloading...");
+    }
+    pwallet->BlockUntilSyncedToCurrentChain();
+
+    auto locked_chain = pwallet->chain().lock();
+    LOCK(pwallet->cs_wallet);
+
+    CTxDestination dest = DecodeDestination(request.params[0].get_str());
+    CAmount lock_amount = AmountFromValue(request.params[1]);
+    int64_t lock_height = request.params[2].get_int64();
+    if (!IsValidDestination(dest)) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid buyer address");
+    }
+
+    if (dest.type() != typeid(PKHash)) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Only support PUBKEYHASH");
+    }
+    auto keyID = CKeyID(boost::get<PKHash>(dest));
+
+    LOCK(cs_main);
+    auto redeemScript = GenerateTicketScript(keyID, lock_height);
+    dest = CTxDestination(ScriptHash(CScriptID(redeemScript)));
+    auto scriptPubkey = GetScriptForDestination(dest);
+    auto opRetScript = CScript() << OP_RETURN << CTicket::VERSION_LOCK << ToByteVector(redeemScript);
+    LogPrint(BCLog::TICKET, "%s: lock_height:%d, lock_amount:%d\n", __func__, lock_height, lock_amount);
+
+    CCoinControl coin_control;
+    mapValue_t mapValue;
+    CTransactionRef tx = SendMoneyWithOpRet(*locked_chain, pwallet, dest, lock_amount, false, opRetScript, coin_control, std::move(mapValue));
+
+    std::set<CScript> scripts = {redeemScript};
+    pwallet->ImportScripts(scripts, 0 /* timestamp */);
+    scripts.insert(GetScriptForDestination(ScriptHash(CScriptID(redeemScript))));
+    pwallet->ImportScriptPubKeys("locks", scripts, false /* have_solving_data */, true /* apply_label */, 1 /* timestamp */);
+    return tx->GetHash().GetHex();
+}
+
+UniValue unlockcoin(const JSONRPCRequest& request)
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    CWallet* const pwallet = wallet.get();
+
+    if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
+        return NullUniValue;
+    }
+
+            RPCHelpMan{
+                "unlockcoin",
+                "\nunlock coin.\n",
+                {
+                    {"txid", RPCArg::Type::STR, RPCArg::Optional::NO, "The locked coin transaction id."},
+                },
+                RPCResult{
+                    RPCResult::Type::STR, "txid", "(string) The tx id."
+                },
+                RPCExamples{
+                    HelpExampleCli("unlockcoin", "\"8199ceda82a056700475d645e2a0cd588b6853e87e1b4b8a459814078799dd87\" 0")},
+            }
+    .Check(request);
+
+	auto txid = ParseHashV(request.params[0], "txid");
+    auto prevTx = MakeTransactionRef();
+    uint256 hashBlock;
+    if (!GetTransaction(txid, prevTx, Params().GetConsensus(), hashBlock)) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "No locked coin found.");
+    }
+
+    auto ticket = prevTx->Ticket();
+    if (ticket == nullptr){
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "No locked coin found.");
+    }
+    auto redeemScript = ticket->redeemScript;
+    auto scriptPubkey = ticket->scriptPubkey;
+
+    {
+		CScriptID scriptid;
+		auto ticketscript = scriptPubkey;
+		CScriptBase::const_iterator pc = ticketscript.begin();
+		opcodetype opcodeRet;
+		std::vector<unsigned char> vchRet;
+		if (ticketscript.GetOp(pc, opcodeRet, vchRet) 
+			&& ticketscript.GetOp(pc, opcodeRet, vchRet)) {
+			scriptid = CScriptID(uint160(vchRet));
+			if (!ticketscript.GetOp(pc, opcodeRet, vchRet) || opcodeRet != OP_EQUAL) {
+				throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid lockcoin ScriptPubkey");
+			}
+		}else{
+			throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid lockcoin ScriptPubkey");
+		}
+
+		// parese the dest from redeemscript
+		CScriptID dest = CScriptID(redeemScript);
+
+		if (dest != scriptid){
+			throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid lockcoin RedeemScript");
+		}
+    }
+
+	auto n = ticket->out->n;
+    if (n < 0 || n >= prevTx->vout.size()) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid params");
+    }
+
+    //get key
+    CKeyID keyid;
+    int lockHeight;
+    if (!DecodeTicketScript(redeemScript, keyid, lockHeight)) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid redeem script");
+    }
+    if (lockHeight > ::ChainActive().Height()) {
+        throw JSONRPCError(RPC_TRANSACTION_REJECTED, "Redeem script non-final");
+    }
+    CKey vchSecret;
+    LegacyScriptPubKeyMan& spk_man = EnsureLegacyScriptPubKeyMan(*wallet);
+    {
+        auto locked_chain = pwallet->chain().lock();
+        LOCK2(pwallet->cs_wallet, spk_man.cs_KeyStore);
+        EnsureWalletIsUnlocked(pwallet);
+        if (!spk_man.GetKey(keyid, vchSecret)) {
+            throw JSONRPCError(RPC_WALLET_ERROR, "Private key for loced coin is not known");
+        }
+    }
+    auto tx = CreateTicketSpendTx(pwallet, redeemScript, prevTx->GetHash(), n, prevTx->vout[n], CTxDestination(PKHash(keyid)), vchSecret);
+    if (!tx) {
+        throw JSONRPCError(RPC_TRANSACTION_REJECTED, "Create lockcoin spend transaction error.");
+    }
+    std::string errStr;
+    if (! pwallet->chain().broadcastTransaction(tx, pwallet->m_default_max_tx_fee, true, errStr)) {
+        throw JSONRPCError(RPC_TRANSACTION_REJECTED, errStr);
+    }
+    return tx->GetHash().GetHex();
+}
+
+static UniValue listlockcoins(const JSONRPCRequest& request)
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    CWallet* const pwallet = wallet.get();
+
+    if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
+        return NullUniValue;
+    }
+
+    if (request.fHelp || request.params.size() > 4)
+        RPCHelpMan{"listlockcoins",
+            "\nReturns locked coins.\n"
+            {
+				{"address", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "address"},
+            },
+            RPCResult{
+                RPCResult::Type::ARR, "", "",
+                {
+                    {RPCResult::Type::STR, "outpoint", "xxx:xxx,	(string)the txid:vout"},
+                    {RPCResult::Type::STR, "address", "address,	    (string) the address"},
+                    {RPCResult::Type::NUM, "height", "lock height"},
+                    {RPCResult::Type::NUM, "amount", false, "lock amount"},
+                }
+            },
+            RPCExamples{
+                HelpExampleCli("listlockcoins", "\"1PGFqEzfmQch1gKD3ra4k18PNj3tTUUSqg\"")
+            },
+        }.Check(request);
+
+	CTxDestination destination = DecodeDestination(request.params[0].get_str());
+	if (!IsValidDestination(destination)) {
+		throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid address");
+	}
+	if (destination.type() != typeid(PKHash)) {
+		throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Only support PUBKEYHASH");
+	}
+
+	UniValue results(UniValue::VARR);
+    LOCK(cs_main);
+    CCoinsViewCache &coinsview = ::ChainstateActive().CoinsTip();
+    auto pkhash = boost::get<PKHash>(destination);
+	auto& locked_coins = pticketview->LockedCoins(CKeyID(pkhash));
+    for (auto& ticket : locked_coins) {
+        auto out = ticket.out;
+        if (coinsview.AccessCoin(COutPoint(out->hash, out->n)).IsSpent())
+            continue;
+        auto keyid = ticket.KeyID();
+        if (keyid != CKeyID(pkhash))
+            continue;
+
+		UniValue entry(UniValue::VOBJ);
+		int height = ticket.LockTime();
+
+        entry.pushKV("outpoint", out->hash.ToString() + ":" + std::to_string(out->n));
+		entry.pushKV("address", EncodeDestination(PKHash(keyid)));
+		entry.pushKV("height", height);
+		entry.pushKV("amount", ticket.nValue);
+		results.push_back(entry);
+	}
+
+    return results;
+}
+
 UniValue abortrescan(const JSONRPCRequest& request); // in rpcdump.cpp
 UniValue dumpprivkey(const JSONRPCRequest& request); // in rpcdump.cpp
 UniValue importprivkey(const JSONRPCRequest& request);
@@ -5082,7 +5303,11 @@ static const CRPCCommand commands[] =
 	{ "ticket",             "freeaddresstickets",			    &freeaddresstickets,			{"address", "receiver"} },
     { "ticket",             "getaddresstickets",                &getaddresstickets,             {"addresses","all"} },
     { "ticket",             "listtickets",                      &listtickets,                   {"index","all"} },
-    { "ticket",             "getslotinfo",                      &getslotinfo,                   {"index"} }, 
+    { "ticket",             "getslotinfo",                      &getslotinfo,                   {"index"} },
+    
+    { "lock",                "lockcoin",                        &lockcoin,                      {"address" "amount", "height"} },
+    { "lock",               "unlockcoin",                       &unlockcoin,                    {"txid"} },
+    { "lock",               "listlockcoins",                    &listlockcoins,                 {"addresses"} },
 };
 // clang-format on
 

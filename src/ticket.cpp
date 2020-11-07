@@ -39,13 +39,14 @@ bool DecodeTicketScript(const CScript redeemScript, CKeyID& keyID, int &lockHeig
     return false;
 }
 
-bool GetRedeemFromScript(const CScript script, CScript& redeemscript)
+bool GetRedeemFromScript(const CScript script, int& version, CScript& redeemscript)
 {
 	CScriptBase::const_iterator pc = script.begin();
 	opcodetype opcodeRet;
 	vector<unsigned char> vchRet;
 	if (script.GetOp(pc, opcodeRet, vchRet) && opcodeRet == OP_RETURN) {
 		if (script.GetOp(pc, opcodeRet, vchRet)) {
+            version = CScript::DecodeOP_N(opcodeRet);
 			if (script.GetOp(pc, opcodeRet, vchRet)) {
 				redeemscript = CScript(vchRet.begin(),vchRet.end());
 				return true;
@@ -55,8 +56,8 @@ bool GetRedeemFromScript(const CScript script, CScript& redeemscript)
 	return false;
 }
 
-CTicket::CTicket(const COutPoint& out, const CAmount nValue, const CScript& redeemScript, const CScript &scriptPubkey)
-    :out(new COutPoint(out)), redeemScript(redeemScript), scriptPubkey(scriptPubkey), nValue(nValue)
+CTicket::CTicket(const COutPoint& out, const CAmount nValue, int version, const CScript& redeemScript, const CScript &scriptPubkey)
+    :out(new COutPoint(out)), nValue(nValue), nVersion(version), redeemScript(redeemScript), scriptPubkey(scriptPubkey)
 {
 	CScriptBase::const_iterator pc = scriptPubkey.begin();
 	opcodetype opcodeRet;
@@ -76,6 +77,7 @@ CTicket::CTicket(const COutPoint& out, const CAmount nValue, const CScript& rede
 CTicket::CTicket(const CTicket& other) : out(new COutPoint(*(other.out)))
 {
     nValue = other.nValue;
+    nVersion = other.nVersion;
     redeemScript = other.redeemScript;
     scriptPubkey = other.scriptPubkey;
 }
@@ -95,6 +97,7 @@ void CTicket::Serialize(Stream& s) const
     s << out->hash;
     s << out->n;
     s << nValue;
+    s << nVersion;
     s << redeemScript;
     s << scriptPubkey;
 }
@@ -105,6 +108,7 @@ void CTicket::Unserialize(Stream& s)
     s >> out->hash;
     s >> out->n;
     s >> nValue;
+    s >> nVersion;
     s >> redeemScript;
     s >> scriptPubkey;
 }
@@ -169,9 +173,7 @@ bool CTicket::Invalid() const
 
 CAmount CTicketView::BaseTicketPrice = 500 * COIN;
 CAmount nSlotLowerBoundTickerPrice = 100 * COIN;
-static const char DB_TICKET_SYNCED_KEY = 'S';
-static const char DB_TICKET_SLOT_KEY = 'L';
-static const char DB_TICKET_ADDR_KEY = 'A';
+static const char* DB_TICKET_LOCK_KEY = "LockCoin"
 static const char DB_TICKET_HEIGHT_KEY = 'H';
 
 static std::vector<CTicketRef> dummyTickets;
@@ -181,6 +183,7 @@ void CTicketView::ConnectBlock(const int height, const CBlock &blk, CheckTicketF
     LogPrint(BCLog::TICKET, "%s: height:%d\n", __func__, height);
     updateTicketPrice(height);
     std::vector<CTicket> tickets;
+    bool hasnewlockedcoin = false;
     for (auto tx : blk.vtx) {        
         if (!tx->IsTicketTx())
             continue;
@@ -189,15 +192,24 @@ void CTicketView::ConnectBlock(const int height, const CBlock &blk, CheckTicketF
             LogPrint(BCLog::TICKET, "%s: CheckTicket failure, hash:%s:%d\n", __func__, ticket->out->hash.ToString(), ticket->out->n);
             continue;
         }
-        tickets.emplace_back(*ticket);
-        ticketsInSlot[slotIndex].emplace_back(ticket);
-        ticketsInAddr[ticket->KeyID()].emplace_back(ticket);
-        LogPrint(BCLog::TICKET, "%s: detected a new ticket, height:%d, hash:%s:%d\n", __func__, height, ticket->out->hash.ToString(), ticket->out->n);
+        if (ticket->nVersion == CTicket::VERSION_LOCK) {
+            lockedCoins[*ticket->out] = *ticket;
+            hasnewlockedcoin = true;
+            LogPrint(BCLog::TICKET, "%s: detected a new locked coin, height:%d, hash:%s:%d\n", __func__, height, ticket->out->hash.ToString(), ticket->out->n);
+        } else {
+            tickets.emplace_back(*ticket);
+            ticketsInSlot[slotIndex].emplace_back(ticket);
+            ticketsInAddr[ticket->KeyID()].emplace_back(ticket);
+            LogPrint(BCLog::TICKET, "%s: detected a new ticket, height:%d, hash:%s:%d\n", __func__, height, ticket->out->hash.ToString(), ticket->out->n);
+        }
     } 
     if (tickets.size() > 0) {
         if (!WriteTicketsToDisk(height, tickets)) {
             LogPrint(BCLog::TICKET, "%s: WriteTicketsToDisk retrun false, height:%d\n", __func__, height);
         }
+    }
+    if (hasnewlockedcoin && !PersistLockedCoins()) {
+        LogPrint(BCLog::TICKET, "%s: PersistLockedCoins retrun false, height:%d\n", __func__, height);
     }
 }
 
@@ -269,6 +281,11 @@ bool CTicketView::WriteTicketsToDisk(const int height, const std::vector<CTicket
     return Write(std::make_pair(DB_TICKET_HEIGHT_KEY, height), tickets);
 }
 
+bool CTicketView::PersistLockedCoins()
+{
+    return Write(DB_TICKET_LOCK_KEY, lockedCoins);
+}
+
 bool CTicketView::LoadTicketFromDisk(const int height)
 {
     updateTicketPrice(height);
@@ -284,6 +301,17 @@ bool CTicketView::LoadTicketFromDisk(const int height)
             t.reset(new CTicket(ticket));
             ticketsInSlot[slotIndex].emplace_back(t);
             ticketsInAddr[ticket.KeyID()].emplace_back(t);
+        }
+    }
+    return true;
+}
+
+bool CTicketView::LoadLockedCoins()
+{
+    if (Exists(DB_TICKET_LOCK_KEY)) {
+        if (!Read(DB_TICKET_LOCK_KEY, lockedCoins)) {
+            LogPrint(BCLog::TICKET, "%s: Read locked coins failed.\n", __func__);
+            return false;
         }
     }
     return true;

@@ -13,7 +13,7 @@ CScript GenerateTicketScript(const CKeyID keyid, const int lockHeight);
 
 bool DecodeTicketScript(const CScript redeemScript, CKeyID& keyID, int &lockHeight);
 
-bool GetRedeemFromScript(const CScript script, CScript& redeemscript);
+bool GetRedeemFromScript(const CScript script, int& version, CScript& redeemscript);
 
 class COutPoint;
 /**
@@ -26,6 +26,7 @@ class COutPoint;
 class CTicket {
 public:
     static const int32_t VERSION = 1;
+    static const int32_t VERSION_LOCK = 7;
 
     enum CTicketState {
         IMMATURATE = 0,
@@ -36,10 +37,11 @@ public:
 
     COutPoint* out;
     CAmount nValue;
+    int nVersion;
     CScript redeemScript;
     CScript scriptPubkey;
 
-    CTicket(const COutPoint& out, const CAmount nValue, const CScript& redeemScript, const CScript &scriptPubkey);
+    CTicket(const COutPoint& out, const CAmount nValue, int version, const CScript& redeemScript, const CScript &scriptPubkey);
 
     CTicket(const CTicket& other);
 
@@ -122,11 +124,15 @@ public:
      * @param[in]   height, the block height, from which tickets are load.
      */
     bool LoadTicketFromDisk(const int height);
+    bool LoadLockedCoins();
 
     CAmount TicketPriceInSlot(const int index);
 
+    const std::map<COutPoint, CTicket> LockedCoins() const {return lockedCoins;}
+
 private:
     bool WriteTicketsToDisk(const int height, const std::vector<CTicket> &tickets);
+    bool PersistLockedCoins();
     
     /** 
      * Update the ticket price, by +5% or -5% one slot.
@@ -145,6 +151,7 @@ private:
     /** This map records tickets in each slot, one slot is 2048 blocks.*/
     std::map<int, std::vector<CTicketRef>> ticketsInSlot;
     std::map<CKeyID, std::vector<CTicketRef>> ticketsInAddr;
+    std::map<COutPoint, CTicket> lockedCoins;
     CAmount ticketPrice;
     int slotIndex;
     static CAmount BaseTicketPrice;
