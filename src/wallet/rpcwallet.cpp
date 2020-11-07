@@ -5077,27 +5077,31 @@ UniValue unlockcoin(const JSONRPCRequest& request)
                 "unlockcoin",
                 "\nunlock coin.\n",
                 {
-                    {"txid", RPCArg::Type::STR, RPCArg::Optional::NO, "The locked coin transaction id."},
+                    {"outpoint", RPCArg::Type::STR, RPCArg::Optional::NO, "The locked coin outpoint."},
                 },
                 RPCResult{
                     RPCResult::Type::STR, "txid", "(string) The tx id."
                 },
                 RPCExamples{
-                    HelpExampleCli("unlockcoin", "\"8199ceda82a056700475d645e2a0cd588b6853e87e1b4b8a459814078799dd87\" 0")},
+                    HelpExampleCli("unlockcoin", "\"8199ceda82a056700475d645e2a0cd588b6853e87e1b4b8a459814078799dd87:1\"")},
             }
     .Check(request);
 
-	auto txid = ParseHashV(request.params[0], "txid");
-    auto prevTx = MakeTransactionRef();
-    uint256 hashBlock;
-    if (!GetTransaction(txid, prevTx, Params().GetConsensus(), hashBlock)) {
-        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "No locked coin found.");
-    }
+    auto param_outpoint = request.params[0].get_str();
+    auto nPos = param_outpoint.find(':');
+    if (nPos == -1)
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid outpoint");
 
-    auto ticket = prevTx->Ticket();
-    if (ticket == nullptr){
+    auto hash = std::string(param_outpoint.c_str(), nPos);
+	auto txid = uint256S(hash);
+    auto nvout = std::stoul(param_outpoint.c_str() + nPos + 1);
+    auto& locked_coins = pticketview->LockedCoins();
+    
+    auto iter = locked_coins.find({txid, nvout});
+    if (iter == locked_coins.end()){
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "No locked coin found.");
     }
+    auto ticket = &(iter->second);
     auto redeemScript = ticket->redeemScript;
     auto scriptPubkey = ticket->scriptPubkey;
 
@@ -5125,11 +5129,6 @@ UniValue unlockcoin(const JSONRPCRequest& request)
 		}
     }
 
-	auto n = ticket->out->n;
-    if (n < 0 || n >= prevTx->vout.size()) {
-        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid params");
-    }
-
     //get key
     CKeyID keyid;
     int lockHeight;
@@ -5149,7 +5148,7 @@ UniValue unlockcoin(const JSONRPCRequest& request)
             throw JSONRPCError(RPC_WALLET_ERROR, "Private key for loced coin is not known");
         }
     }
-    auto tx = CreateTicketSpendTx(pwallet, redeemScript, prevTx->GetHash(), n, prevTx->vout[n], CTxDestination(PKHash(keyid)), vchSecret);
+    auto tx = CreateTicketSpendTx(pwallet, redeemScript, txid, nvout, CTxOut(ticket->nValue, ticket->scriptPubkey), CTxDestination(PKHash(keyid)), vchSecret);
     if (!tx) {
         throw JSONRPCError(RPC_TRANSACTION_REJECTED, "Create lockcoin spend transaction error.");
     }
@@ -5171,7 +5170,7 @@ static UniValue listlockcoins(const JSONRPCRequest& request)
 
     if (request.fHelp || request.params.size() > 4)
         RPCHelpMan{"listlockcoins",
-            "\nReturns locked coins.\n"
+            "\nReturns locked coins.\n",
             {
 				{"address", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "address"},
             },
@@ -5200,23 +5199,22 @@ static UniValue listlockcoins(const JSONRPCRequest& request)
 	UniValue results(UniValue::VARR);
     LOCK(cs_main);
     CCoinsViewCache &coinsview = ::ChainstateActive().CoinsTip();
-    auto pkhash = boost::get<PKHash>(destination);
-	auto& locked_coins = pticketview->LockedCoins(CKeyID(pkhash));
+    auto pkid = CKeyID(boost::get<PKHash>(destination));
+	auto& locked_coins = pticketview->LockedCoins();
     for (auto& ticket : locked_coins) {
-        auto out = ticket.out;
-        if (coinsview.AccessCoin(COutPoint(out->hash, out->n)).IsSpent())
+        if (coinsview.AccessCoin(COutPoint(ticket.first)).IsSpent())
             continue;
-        auto keyid = ticket.KeyID();
-        if (keyid != CKeyID(pkhash))
+        auto keyid = ticket.second.KeyID();
+        if (keyid != pkid)
             continue;
 
 		UniValue entry(UniValue::VOBJ);
-		int height = ticket.LockTime();
+		int height = ticket.second.LockTime();
 
-        entry.pushKV("outpoint", out->hash.ToString() + ":" + std::to_string(out->n));
+        entry.pushKV("outpoint", ticket.first.hash.ToString() + ":" + std::to_string(ticket.first.n));
 		entry.pushKV("address", EncodeDestination(PKHash(keyid)));
-		entry.pushKV("height", height);
-		entry.pushKV("amount", ticket.nValue);
+		entry.pushKV("lock_height", height);
+		entry.pushKV("lock_amount", ticket.second.nValue);
 		results.push_back(entry);
 	}
 

@@ -5186,6 +5186,8 @@ static CMainCleanup instance_of_cmaincleanup;
 
 bool TestTicket(const int height, const CTicketRef ticket)
 {
+    if (ticket->nVersion == CTicket::VERSION_LOCK)
+        return true;
     auto index = pticketview->SlotIndex();
     auto len = pticketview->SlotLength();
     if (ticket->LockTime() != ((index + 1) * len -1)) {

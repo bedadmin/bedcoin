@@ -14,7 +14,7 @@ using namespace std;
 
 CScript GenerateTicketScript(const CKeyID keyid, const int lockHeight)
 {
-    auto script = CScript() << CScriptNum(lockHeight) << OP_CHECKLOCKTIMEVERIFY << OP_DROP << OP_DUP << OP_HASH160 << ToByteVector(keyid) << OP_EQUALVERIFY << OP_CHECKSIG;
+    auto script = CScript() << lockHeight << OP_CHECKLOCKTIMEVERIFY << OP_DROP << OP_DUP << OP_HASH160 << ToByteVector(keyid) << OP_EQUALVERIFY << OP_CHECKSIG;
     return std::move(script);
 }
 
@@ -183,7 +183,7 @@ void CTicketView::ConnectBlock(const int height, const CBlock &blk, CheckTicketF
     LogPrint(BCLog::TICKET, "%s: height:%d\n", __func__, height);
     updateTicketPrice(height);
     std::vector<CTicket> tickets;
-    bool hasnewlockedcoin = false;
+    std::vector<CTicket> lock_coins;
     for (auto tx : blk.vtx) {        
         if (!tx->IsTicketTx())
             continue;
@@ -193,8 +193,8 @@ void CTicketView::ConnectBlock(const int height, const CBlock &blk, CheckTicketF
             continue;
         }
         if (ticket->nVersion == CTicket::VERSION_LOCK) {
-            lockedCoins[*ticket->out] = *ticket;
-            hasnewlockedcoin = true;
+            lock_coins.emplace_back(*ticket);
+            lockedCoinMap[*ticket->out] = *ticket;
             LogPrint(BCLog::TICKET, "%s: detected a new locked coin, height:%d, hash:%s:%d\n", __func__, height, ticket->out->hash.ToString(), ticket->out->n);
         } else {
             tickets.emplace_back(*ticket);
@@ -208,7 +208,7 @@ void CTicketView::ConnectBlock(const int height, const CBlock &blk, CheckTicketF
             LogPrint(BCLog::TICKET, "%s: WriteTicketsToDisk retrun false, height:%d\n", __func__, height);
         }
     }
-    if (hasnewlockedcoin && !PersistLockedCoins()) {
+    if (lock_coins.size() > 0 && !PersistLockedCoins(lock_coins)) {
         LogPrint(BCLog::TICKET, "%s: PersistLockedCoins retrun false, height:%d\n", __func__, height);
     }
 }
@@ -281,9 +281,13 @@ bool CTicketView::WriteTicketsToDisk(const int height, const std::vector<CTicket
     return Write(std::make_pair(DB_TICKET_HEIGHT_KEY, height), tickets);
 }
 
-bool CTicketView::PersistLockedCoins()
+bool CTicketView::PersistLockedCoins(const std::vector<CTicket>& lock_coins)
 {
-    return Write(DB_TICKET_LOCK_KEY, lockedCoins);
+    for (auto& coin : lock_coins) {
+        if (!Write(std::make_pair(DB_TICKET_LOCK_KEY, *coin.out), coin))
+            return false;
+    }
+    return true;
 }
 
 bool CTicketView::LoadTicketFromDisk(const int height)
@@ -308,12 +312,26 @@ bool CTicketView::LoadTicketFromDisk(const int height)
 
 bool CTicketView::LoadLockedCoins()
 {
-    if (Exists(DB_TICKET_LOCK_KEY)) {
-        if (!Read(DB_TICKET_LOCK_KEY, lockedCoins)) {
-            LogPrint(BCLog::TICKET, "%s: Read locked coins failed.\n", __func__);
-            return false;
+    auto iter = NewIterator();
+    std::pair<std::string, COutPoint> key;
+    CTicket coin;
+    LogPrint(BCLog::TICKET, "%s: LoadLockedCoins start.......\n", __func__ );
+    iter->Seek(std::make_pair(DB_TICKET_LOCK_KEY, COutPoint(uint256(), 0)));
+    for (;iter->Valid(); iter->Next())
+    {
+        if (!iter->GetKey(key)) {
+            LogPrint(BCLog::TICKET, "%s: get key error.\n", __func__ );
+            continue;
         }
+        if (!iter->GetValue(coin)) {
+            LogPrint(BCLog::TICKET, "%s: get value error.\n", __func__ );
+            continue;
+        }
+        LogPrint(BCLog::TICKET, "%s: loaded coins %s %s:%d %d.\n", __func__, key.first, key.second.hash.ToString(), key.second.n, coin.nValue);
+        lockedCoinMap[key.second] = coin;
     }
+    LogPrint(BCLog::TICKET, "%s: LoadLockedCoins end.\n", __func__ );
+
     return true;
 }
 

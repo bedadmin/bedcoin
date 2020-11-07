@@ -128,11 +128,11 @@ public:
 
     CAmount TicketPriceInSlot(const int index);
 
-    const std::map<COutPoint, CTicket> LockedCoins() const {return lockedCoins;}
+    const std::map<COutPoint, CTicket> LockedCoins() const {return lockedCoinMap;}
 
 private:
     bool WriteTicketsToDisk(const int height, const std::vector<CTicket> &tickets);
-    bool PersistLockedCoins();
+    bool PersistLockedCoins(const std::vector<CTicket>& lock_coins);
     
     /** 
      * Update the ticket price, by +5% or -5% one slot.
@@ -151,7 +151,7 @@ private:
     /** This map records tickets in each slot, one slot is 2048 blocks.*/
     std::map<int, std::vector<CTicketRef>> ticketsInSlot;
     std::map<CKeyID, std::vector<CTicketRef>> ticketsInAddr;
-    std::map<COutPoint, CTicket> lockedCoins;
+    std::map<COutPoint, CTicket> lockedCoinMap;
     CAmount ticketPrice;
     int slotIndex;
     static CAmount BaseTicketPrice;

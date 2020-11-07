@@ -176,6 +176,8 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "listtickets", 1, "all" },
     { "getaddresstickets", 1, "all" },
     { "getslotinfo", 0, "index" },
+    { "lockcoin", 1, "amount" },
+    { "lockcoin", 2, "height" },
 };
 // clang-format on
 
