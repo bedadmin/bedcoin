@@ -343,7 +343,7 @@ CAmount CTicketView::TicketPriceInSlot(const int index)
             price *= 1.05;
         }
         else if (ticketsInSlot[i].size() < SlotLength()) {
-            price = std::max(CAmount(price * 0.95), i * nSlotLowerBoundTickerPrice);
+            price *= 0.95;
         }
         price = (i + 1) > 1 ? price : BaseTicketPrice;
     }
@@ -359,7 +359,7 @@ void CTicketView::updateTicketPrice(const int height)
             ticketPrice *= 1.05;
         }
         else if (prevSlotTicketSize < len) {
-            ticketPrice = std::max(CAmount(ticketPrice * 0.95), slotIndex * nSlotLowerBoundTickerPrice);
+            ticketPrice *= 0.95;
         }
         ticketPrice = slotIndex > 1 ? ticketPrice : BaseTicketPrice;
         slotIndex = int(height / len);
