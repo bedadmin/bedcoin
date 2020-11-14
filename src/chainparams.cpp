@@ -73,8 +73,7 @@ public:
         consensus.CSVHeight = 0; // 000000000000000004a1b34462cb8aeebd5799177f7a29cf28f2d1961716b5b5
         consensus.SegwitHeight = 0; // 0000000000000000001c8018d9cb3b742ef25114f27563e3fc4a1902167f9893
         consensus.MinBIP9WarningHeight = 0; // segwit activation height + miner confirmation window
-        consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        //consensus.powLimit = uint256S("0000000000000a24a10000000000000000000000000000000000000000000000"); // 11.84T + 10min
+        consensus.powLimit = uint256S("00000000000000020cb30a9b2918200000000000000000000000000000000000"); // 15P + 10min
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
         consensus.nPowTargetSpacing = 10 * 60;
         consensus.fPowAllowMinDifficultyBlocks = false;
@@ -101,7 +100,7 @@ public:
         pchMessageStart[0] = 0xbe;
         pchMessageStart[1] = 0xd9;
         pchMessageStart[2] = 0xf9;
-        pchMessageStart[3] = 0xb4;
+        pchMessageStart[3] = 0xb7;
         nDefaultPort = 8333;
         nPruneAfterHeight = 100000;
         m_assumed_blockchain_size = 320;
@@ -137,7 +136,7 @@ public:
         m_is_test_chain = false;
         m_is_mockable_chain = false;
         nSlotLength = 1008;
-        auto&& vstakingScriptPubKey = ParseHex("0014b2036e133047054b4b4877773755b8d192be06bf");
+        auto&& vstakingScriptPubKey = ParseHex("76a91464005c19fbf9d51ff4a8b5a777c4735878de666888ac");
         stakingScriptPubKey = CScript(vstakingScriptPubKey.begin(), vstakingScriptPubKey.end());
 
         chainTxData = ChainTxData{
