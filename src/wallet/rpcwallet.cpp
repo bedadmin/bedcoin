@@ -5094,7 +5094,7 @@ UniValue unlockcoin(const JSONRPCRequest& request)
 
     auto hash = std::string(param_outpoint.c_str(), nPos);
 	auto txid = uint256S(hash);
-    auto nvout = std::stoul(param_outpoint.c_str() + nPos + 1);
+    uint32_t nvout = std::stoul(param_outpoint.c_str() + nPos + 1);
     auto& locked_coins = pticketview->LockedCoins();
     
     auto iter = locked_coins.find({txid, nvout});
@@ -5148,7 +5148,8 @@ UniValue unlockcoin(const JSONRPCRequest& request)
             throw JSONRPCError(RPC_WALLET_ERROR, "Private key for loced coin is not known");
         }
     }
-    auto tx = CreateTicketSpendTx(pwallet, redeemScript, txid, nvout, CTxOut(ticket->nValue, ticket->scriptPubkey), CTxDestination(PKHash(keyid)), vchSecret);
+    auto txdest = CTxDestination(PKHash(keyid));
+    auto tx = CreateTicketSpendTx(pwallet, redeemScript, txid, nvout, CTxOut(ticket->nValue, ticket->scriptPubkey), txdest, vchSecret);
     if (!tx) {
         throw JSONRPCError(RPC_TRANSACTION_REJECTED, "Create lockcoin spend transaction error.");
     }
