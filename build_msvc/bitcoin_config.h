@@ -9,7 +9,7 @@
 /* #undef AC_APPLE_UNIVERSAL_BUILD */
 
 /* Version Build */
-#define CLIENT_VERSION_BUILD 10
+#define CLIENT_VERSION_BUILD 0
 
 /* Version is release */
 #define CLIENT_VERSION_IS_RELEASE true
@@ -21,7 +21,7 @@
 #define CLIENT_VERSION_MINOR 20
 
 /* Build revision */
-#define CLIENT_VERSION_REVISION 1
+#define CLIENT_VERSION_REVISION 2
 
 /* Copyright holder(s) before %s replacement */
 #define COPYRIGHT_HOLDERS "The %s developers"
