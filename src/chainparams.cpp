@@ -139,6 +139,13 @@ public:
         auto&& vstakingScriptPubKey = ParseHex("76a91464005c19fbf9d51ff4a8b5a777c4735878de666888ac");
         stakingScriptPubKey = CScript(vstakingScriptPubKey.begin(), vstakingScriptPubKey.end());
 
+        checkpointData = {
+            {
+                {685, uint256S("0000000000000001e1af207d7aefdaaf8edb067dc807fef9911f07a070a3280d")},
+                {687, uint256S("000000000000000061da1d57771f1c7ed2dd48713ef9ea26ab4544f2cc78f156")},
+            }
+        };
+
         chainTxData = ChainTxData{
             // Data from RPC: getchaintxstats 4096 0000000000000000000f2adce67e49b0b6bdeb9de8b7c3d7e93b21e7fc1e819d
             /* nTime    */ 1585764811,
