@@ -1817,6 +1817,130 @@ UniValue analyzepsbt(const JSONRPCRequest& request)
     return result;
 }
 
+CScript build_atomic_swap_contract(const CKeyID& refund, const CKeyID& redeem, const uint256& secret_hash, int64_t locktime) {
+    return CScript()
+        << OP_IF
+            << OP_HASH256 << ToByteVector(secret_hash) << OP_EQUALVERIFY
+            << OP_DUP << OP_HASH160 << ToByteVector(redeem)
+        << OP_ELSE
+            << CScriptNum(locktime) << OP_CHECKSEQUENCEVERIFY << OP_DROP
+            << OP_DUP << OP_HASH160 << ToByteVector(refund)
+        << OP_ENDIF
+        << OP_EQUALVERIFY << OP_CHECKSIG;
+}
+
+using vop_codes = std::vector<std::pair<opcodetype, std::vector<unsigned char>>>;
+vop_codes extract_script(const CScript& script) {
+    vop_codes res;
+    opcodetype opcode;
+    std::vector<unsigned char> vch;
+    auto pc = script.begin();
+    while (pc < script.end()) {
+        if (!script.GetOp(pc, opcode, vch)) {
+            break;
+        }
+        if (0 <= opcode && opcode <= OP_PUSHDATA4) {
+            res.emplace_back(opcode, vch);
+        } else {
+            res.emplace_back(opcode, {});
+        }
+    }
+    return res;
+}
+
+CKeyID ensure_valid_address(const std::string& addr) {
+    CTxDestination dest = DecodeDestination(addr);
+	if (!IsValidDestination(dest)) {
+		throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid address");
+	}
+	if (dest.type() != typeid(PKHash)) {
+		throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Only support PUBKEYHASH");
+	}
+    return CKeyID(boost::get<PKHash>(dest));
+}
+
+UniValue initialte(const JSONRPCRequest& request)
+{
+    auto refund_addr = ensure_valid_address(request.params[0].get_str());
+    auto redeem_addr = ensure_valid_address(request.params[1].get_str());
+    auto locktime = GetTime() + 48 * 3600;
+    unsigned char secret[8];
+    GetStrongRandBytes(secret, sizeof(secret));
+    uint256 secret_hash;
+    CHash256().Write(secret, sizeof(secret)).Finalize(secret_hash.begin());
+
+    auto htlc = build_atomic_swap_contract(refund_addr, redeem_addr, secret_hash, locktime);
+
+    UniValue result;
+    result.pushKV("locktime", locktime);
+    result.pushKV("secret", HexStr(secret, secret+8));
+    result.pushKV("secret_hash", HexStr(secret_hash));
+    result.pushKV("refund_addr", EncodeDestination(CTxDestination(PkHash(refund_addr))));
+    result.pushKV("participant", EncodeDestination(CTxDestination(PkHash(redeem_addr))));
+    result.pushKV("contract_addr", EncodeDestination(CTxDestination(ScriptHash(htlc))));
+    result.pushKV("contract_hex", HexStr(htlc.begin(), htlc.end()));
+    result.pushKV("contract_asm", ScriptToAsmStr(htlc));
+    return result;
+}
+
+UniValue participate(const JSONRPCRequest& request)
+{
+    auto refund_addr = ensure_valid_address(request.params[0].get_str());
+    auto redeem_addr = ensure_valid_address(request.params[1].get_str());
+    auto secret_hash = uint256S(request.params[2].get_str());
+    auto locktime = GetTime() + 24 * 3600;
+
+    auto htlc = build_atomic_swap_contract(refund_addr, redeem_addr, secret_hash, locktime);
+
+    UniValue result;
+    result.pushKV("locktime", locktime);
+    result.pushKV("secret_hash", HexStr(secret_hash));
+    result.pushKV("refund_addr", EncodeDestination(CTxDestination(PkHash(refund_addr))));
+    result.pushKV("participant", EncodeDestination(CTxDestination(PkHash(redeem_addr))));
+    result.pushKV("contract_addr", EncodeDestination(CTxDestination(ScriptHash(htlc))));
+    result.pushKV("contract_hex", HexStr(htlc.begin(), htlc.end()));
+    result.pushKV("contract_asm", ScriptToAsmStr(htlc));
+    return result;
+}
+
+UniValue validatecontract(const JSONRPCRequest& request)
+{
+    auto script_hex = ParseHex(request.params[0].get_str());
+    auto htlc = CScript(script_hex.begin(), script_hex.end());
+    auto vop_htlc = extract_script(htlc);
+    CMutableTransaction mtx;
+    if (!DecodeHexTx(mtx, request.params[1].get_str())) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "TX decode failed");
+    }
+
+    if (vop_htlc.size() != 17) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Atomic Swap Contract decode failed");
+    }
+
+    auto htlc_spk = GetScriptForDestination(CTxDestination(ScriptHash(htlc)));
+    int iout{0};
+    for (; iout < mtx.vout.size(); ++i) {
+        CTxOut& out = mtx.vout[i];
+        if (htlc_spk.size() == out.scriptPubKey.size()
+            && memcmp(htlc_spk.begin, out.scriptPubKey.begin(), htlc_spk.size())) {
+                break;
+            }
+    }
+    if (iout == mtx.vout.size()) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "contract and tx mis-match");
+    }
+
+    UniValue result;
+    result.pushKV("locktime", CScriptNum(vop_htlc[8].second).getint());
+    result.pushKV("secret_hash", HexStr(vop_htlc[2].second));
+    result.pushKV("refund_addr", EncodeDestination(CTxDestination(PkHash(CKeyID(vop_htlc[13].second)))));
+    result.pushKV("participant", EncodeDestination(CTxDestination(PkHash(CKeyID(vop_htlc[6].second))))));
+    result.pushKV("contract_addr", EncodeDestination(CTxDestination(ScriptHash(htlc))));
+    result.pushKV("contract_hex", HexStr(htlc.begin(), htlc.end()));
+    result.pushKV("contract_asm", ScriptToAsmStr(htlc));
+    return nullptr;
+}
+
 void RegisterRawTransactionRPCCommands(CRPCTable &t)
 {
 // clang-format off
@@ -1842,6 +1966,15 @@ static const CRPCCommand commands[] =
 
     { "blockchain",         "gettxoutproof",                &gettxoutproof,             {"txids", "blockhash"} },
     { "blockchain",         "verifytxoutproof",             &verifytxoutproof,          {"proof"} },
+
+    { "htlc",           "initialte",                    &initialte,                 {"refund address", "participant address"} },
+    { "htlc",           "participate",                  &participate,               {"refund address", "initiator address", "secret hash"} },
+    { "htlc",           "redeembed",                    &redeembed,                 {"contract", "contract transaction hex", "secret"} },
+    { "htlc",           "redeembtc",                    &redeembtc,                 {"contract", "contract transaction hex", "secret"} },
+    { "htlc",           "refundbed",                    &refundbed,                 {"contract", "contract transaction hex"} },
+    { "htlc",           "refundbtc",                    &refundbtc,                 {"contract", "contract transaction hex"} },
+    { "htlc",           "validatecontract",             &validatecontract,          {"contract", "contract transaction hex"} },
+    { "htlc",           "extractsecret",                &extractsecret,             {"redemption transaction", "secret hash"} },
 };
 // clang-format on
 
