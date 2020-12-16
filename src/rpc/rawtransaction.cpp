@@ -1861,6 +1861,18 @@ CKeyID ensure_valid_address(const std::string& addr) {
 
 UniValue initialte(const JSONRPCRequest& request)
 {
+    RPCHelpMan{"initialte",
+                "\ninitialte atomic swap.\n",
+                {
+                    {"refund_addr", RPCArg::Type::STR, RPCArg::Optional::NO, "refund address"},
+                    {"redeem_addr", RPCArg::Type::STR, RPCArg::Optional::NO, "redeem address"},
+                },
+                RPCResult{RPCResult::Type::OBJ_DYN, "", ""},
+                RPCExamples{
+                    HelpExampleCli("initialte", "\"refund_addr\" \"redeem_addr\"")
+                },
+            }.Check(request);
+
     auto refund_addr = ensure_valid_address(request.params[0].get_str());
     auto redeem_addr = ensure_valid_address(request.params[1].get_str());
     auto locktime = GetTime() + 48 * 3600;
@@ -1885,6 +1897,19 @@ UniValue initialte(const JSONRPCRequest& request)
 
 UniValue participate(const JSONRPCRequest& request)
 {
+    RPCHelpMan{"participate",
+                "\nparticipate atomic swap.\n",
+                {
+                    {"refund_addr", RPCArg::Type::STR, RPCArg::Optional::NO, "refund address"},
+                    {"redeem_addr", RPCArg::Type::STR, RPCArg::Optional::NO, "redeem address"},
+                    {"redeem_addr", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "redeem address"},
+                },
+                RPCResult{RPCResult::Type::OBJ, "", ""},
+                RPCExamples{
+                    HelpExampleCli("participate", "\"refund_addr\" \"redeem_addr\" \"secret_hash\"")
+                },
+            }.Check(request);
+
     auto refund_addr = ensure_valid_address(request.params[0].get_str());
     auto redeem_addr = ensure_valid_address(request.params[1].get_str());
     auto secret_hash = uint256S(request.params[2].get_str());
@@ -1905,6 +1930,18 @@ UniValue participate(const JSONRPCRequest& request)
 
 UniValue validatecontract(const JSONRPCRequest& request)
 {
+    RPCHelpMan{"validatecontract",
+                "\nvalidate atomic swap script in transaction.\n",
+                {
+                    {"script_hex", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "htlc script hex"},
+                    {"tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "htlc fund transaction hex"},
+                },
+                RPCResult{RPCResult::Type::OBJ_DYN, "", ""},
+                RPCExamples{
+                    HelpExampleCli("validatecontract", "\"script_hex\" \"tx\"")
+                },
+            }.Check(request);
+            
     auto script_hex = ParseHex(request.params[0].get_str());
     auto htlc = CScript(script_hex.begin(), script_hex.end());
     auto vop_htlc = extract_script(htlc);
@@ -1922,7 +1959,7 @@ UniValue validatecontract(const JSONRPCRequest& request)
     for (; iout < mtx.vout.size(); ++i) {
         CTxOut& out = mtx.vout[i];
         if (htlc_spk.size() == out.scriptPubKey.size()
-            && memcmp(htlc_spk.begin, out.scriptPubKey.begin(), htlc_spk.size())) {
+            && memcmp(htlc_spk.begin, out.scriptPubKey.begin(), htlc_spk.size()) == 0) {
                 break;
             }
     }
@@ -1938,7 +1975,253 @@ UniValue validatecontract(const JSONRPCRequest& request)
     result.pushKV("contract_addr", EncodeDestination(CTxDestination(ScriptHash(htlc))));
     result.pushKV("contract_hex", HexStr(htlc.begin(), htlc.end()));
     result.pushKV("contract_asm", ScriptToAsmStr(htlc));
-    return nullptr;
+    return result;
+}
+
+UniValue extractsecret(const JSONRPCRequest& request)
+{
+    RPCHelpMan{"extractsecret",
+                "\nextract secret from redeem transaction.\n",
+                {
+                    {"secret_hash", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "secret hash"},
+                    {"tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "redeem tx hex"},
+                },
+                RPCResult{RPCResult::Type::OBJ_DYN, "", ""},
+                RPCExamples{
+                    HelpExampleCli("extractsecret", "\"secret_hash\" \"tx\"")
+                },
+            }.Check(request);
+
+    auto secret_hash = uint256S(request.params[0].get_str());
+    CMutableTransaction mtx;
+    if (!DecodeHexTx(mtx, request.params[1].get_str())) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "TX decode failed");
+    }
+
+    for (auto& vin : mtx.vin) {
+        if (vin.scriptSig.size() < 107)
+            continue;
+        auto vop_ss = extract_script(vin.scriptSig);
+        for (auto& v : vop_ss) {
+            if (v.second.size() == 8) {
+                uint256 hash;
+                auto& secret = v.second;
+                CHash256().Write(secret.begin(), secret.size()).Finalize(hash.begin());
+                if (hash.size() == secret_hash.size()
+                    && memcmp(hash.begin(), secret_hash.begin(), secret_hash.size()) == 0) {
+                    return HexStr(secret);
+                }
+            }
+        }
+    }
+
+    return "not found";
+}
+
+CTransactionRef build_refund_tx(const CKey& prikey, const COutPoint& preout, const CKeyID& receiver, CAmount amount, const CScript& htlc) {
+    CMutableTransaction mtx;
+
+    mtx.vin.push_back(CTxIn(preout, htlc, 0));
+    mtx.vout.push_back(CTxOut(out.nValue - 30000, GetScriptForDestination(CTxDestination(PKHash(receiver)))));
+    mtx.nLockTime = ::ChainActive().Height();
+
+    CHashWriter ss(SER_GETHASH, 0);
+    ss << mtx << 1;
+    auto hash = ss.GetHash();
+    std::vector<unsigned char> vchSig;
+    if (!prikey.Sign(hash, vchSig)) {
+        return MakeTransactionRef();
+    }
+    vchSig.push_back((unsigned char)SIGHASH_ALL);
+    mtx.vin[0].scriptSig = CScript() << vchSig << ToByteVector(prikey.GetPubKey()) << ToByteVector(htlc);
+	CTransaction tx(mtx);
+    return MakeTransactionRef(tx);
+}
+
+CTransactionRef build_redeem_tx(const CKey& prikey, const std::vector<unsigned char> secret, const COutPoint& preout, const CKeyID& receiver, CAmount amount, const CScript& htlc) {
+    CMutableTransaction mtx;
+
+    CScript redeem_script;
+    redeem_script << ToByteVector(secret) << htlc;
+    mtx.vin.push_back(CTxIn(preout, redeem_script, 0));
+    mtx.vout.push_back(CTxOut(out.nValue - 30000, GetScriptForDestination(CTxDestination(PKHash(receiver)))));
+    mtx.nLockTime = ::ChainActive().Height();
+
+    CHashWriter ss(SER_GETHASH, 0);
+    ss << mtx << 1;
+    auto hash = ss.GetHash();
+    std::vector<unsigned char> vchSig;
+    if (!prikey.Sign(hash, vchSig)) {
+        return MakeTransactionRef();
+    }
+    vchSig.push_back((unsigned char)SIGHASH_ALL);
+    mtx.vin[0].scriptSig = CScript() << vchSig << ToByteVector(prikey.GetPubKey()) << ToByteVector(secret) << ToByteVector(htlc);
+	CTransaction tx(mtx);
+    return MakeTransactionRef(tx);
+}
+
+UniValue refundbed(const JSONRPCRequest& request)
+{
+    RPCHelpMan{"refundbed",
+                "\nrefund bed from bedcoin fund transaction after expired.\n",
+                {
+                    {"script_hex", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "htlc script hex"},
+                    {"tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "bed fund tx hex"},
+                },
+                RPCResult{RPCResult::Type::OBJ_DYN, "", ""},
+                RPCExamples{
+                    HelpExampleCli("refundbed", "\"script_hex\" \"tx\"")
+                },
+            }.Check(request);
+
+    auto script_hex = ParseHex(request.params[0].get_str());
+    auto htlc = CScript(script_hex.begin(), script_hex.end());
+    auto vop_htlc = extract_script(htlc);
+    CMutableTransaction mtx;
+    if (!DecodeHexTx(mtx, request.params[1].get_str())) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "TX decode failed");
+    }
+
+    if (vop_htlc.size() != 17) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Atomic Swap Contract decode failed");
+    }
+
+    auto htlc_spk = GetScriptForDestination(CTxDestination(ScriptHash(htlc)));
+    int iout{0};
+    for (; iout < mtx.vout.size(); ++i) {
+        CTxOut& out = mtx.vout[i];
+        if (htlc_spk.size() == out.scriptPubKey.size()
+            && memcmp(htlc_spk.begin, out.scriptPubKey.begin(), htlc_spk.size()) == 0) {
+                break;
+            }
+    }
+    if (iout == mtx.vout.size()) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "contract and tx mis-match");
+    }
+    return result;
+}
+
+UniValue refundbtc(const JSONRPCRequest& request)
+{
+    RPCHelpMan{"refundbtc",
+                "\nrefund btc from bitcoin fund transaction after expired.\n",
+                {
+                    {"script_hex", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "htlc script hex"},
+                    {"tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "btc fund tx hex"},
+                },
+                RPCResult{RPCResult::Type::OBJ_DYN, "", ""},
+                RPCExamples{
+                    HelpExampleCli("refundbtc", "\"script_hex\" \"tx\"")
+                },
+            }.Check(request);
+
+    auto script_hex = ParseHex(request.params[0].get_str());
+    auto htlc = CScript(script_hex.begin(), script_hex.end());
+    auto vop_htlc = extract_script(htlc);
+    CMutableTransaction mtx;
+    if (!DecodeHexTx(mtx, request.params[1].get_str())) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "TX decode failed");
+    }
+
+    if (vop_htlc.size() != 17) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Atomic Swap Contract decode failed");
+    }
+
+    auto htlc_spk = GetScriptForDestination(CTxDestination(ScriptHash(htlc)));
+    int iout{0};
+    for (; iout < mtx.vout.size(); ++i) {
+        CTxOut& out = mtx.vout[i];
+        if (htlc_spk.size() == out.scriptPubKey.size()
+            && memcmp(htlc_spk.begin, out.scriptPubKey.begin(), htlc_spk.size()) == 0) {
+                break;
+            }
+    }
+    if (iout == mtx.vout.size()) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "contract and tx mis-match");
+    }
+    return result;
+}
+
+UniValue redeembed(const JSONRPCRequest& request)
+{
+    RPCHelpMan{"redeembed",
+                "\nredeem bed from bedcoin fund transaction.\n",
+                {
+                    {"script_hex", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "htlc script hex"},
+                    {"tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "bed fund tx hex"},
+                },
+                RPCResult{RPCResult::Type::OBJ_DYN, "", ""},
+                RPCExamples{
+                    HelpExampleCli("redeembed", "\"script_hex\" \"tx\"")
+                },
+            }.Check(request);
+
+    auto script_hex = ParseHex(request.params[0].get_str());
+    auto htlc = CScript(script_hex.begin(), script_hex.end());
+    auto vop_htlc = extract_script(htlc);
+    CMutableTransaction mtx;
+    if (!DecodeHexTx(mtx, request.params[1].get_str())) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "TX decode failed");
+    }
+
+    if (vop_htlc.size() != 17) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Atomic Swap Contract decode failed");
+    }
+
+    auto htlc_spk = GetScriptForDestination(CTxDestination(ScriptHash(htlc)));
+    int iout{0};
+    for (; iout < mtx.vout.size(); ++i) {
+        CTxOut& out = mtx.vout[i];
+        if (htlc_spk.size() == out.scriptPubKey.size()
+            && memcmp(htlc_spk.begin, out.scriptPubKey.begin(), htlc_spk.size()) == 0) {
+                break;
+            }
+    }
+    if (iout == mtx.vout.size()) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "contract and tx mis-match");
+    }
+    return result;
+}
+
+UniValue redeembtc(const JSONRPCRequest& request)
+{
+    RPCHelpMan{"redeembtc",
+                "\nredeem btc from bitcoin fund transaction.\n",
+                {
+                    {"script_hex", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "htlc script hex"},
+                    {"tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "btc fund tx hex"},
+                },
+                RPCResult{RPCResult::Type::OBJ_DYN, "", ""},
+                RPCExamples{
+                    HelpExampleCli("redeembtc", "\"script_hex\" \"tx\"")
+                },
+            }.Check(request);
+
+    auto script_hex = ParseHex(request.params[0].get_str());
+    auto htlc = CScript(script_hex.begin(), script_hex.end());
+    auto vop_htlc = extract_script(htlc);
+    CMutableTransaction mtx;
+    if (!DecodeHexTx(mtx, request.params[1].get_str())) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "TX decode failed");
+    }
+
+    if (vop_htlc.size() != 17) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Atomic Swap Contract decode failed");
+    }
+
+    auto htlc_spk = GetScriptForDestination(CTxDestination(ScriptHash(htlc)));
+    int iout{0};
+    for (; iout < mtx.vout.size(); ++i) {
+        CTxOut& out = mtx.vout[i];
+        if (htlc_spk.size() == out.scriptPubKey.size()
+            && memcmp(htlc_spk.begin, out.scriptPubKey.begin(), htlc_spk.size()) == 0) {
+                break;
+            }
+    }
+    if (iout == mtx.vout.size()) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "contract and tx mis-match");
+    }
+    return result;
 }
 
 void RegisterRawTransactionRPCCommands(CRPCTable &t)
@@ -1974,7 +2257,7 @@ static const CRPCCommand commands[] =
     { "htlc",           "refundbed",                    &refundbed,                 {"contract", "contract transaction hex"} },
     { "htlc",           "refundbtc",                    &refundbtc,                 {"contract", "contract transaction hex"} },
     { "htlc",           "validatecontract",             &validatecontract,          {"contract", "contract transaction hex"} },
-    { "htlc",           "extractsecret",                &extractsecret,             {"redemption transaction", "secret hash"} },
+    { "htlc",           "extractsecret",                &extractsecret,             {"secret hash", "redeemption transaction hex"} },
 };
 // clang-format on
 
