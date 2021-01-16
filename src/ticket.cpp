@@ -345,7 +345,9 @@ CAmount CTicketView::TicketPriceInSlot(const int index)
         else if (ticketsInSlot[i].size() < SlotLength()) {
             price *= 0.95;
         }
-        price = (i + 1) > 1 ? price : BaseTicketPrice;
+        price = (i) > 1 ? price : BaseTicketPrice;
+        if ((i + 1) >= 5 && price < BaseTicketPrice)
+            price = BaseTicketPrice;
     }
     return price;
 }
@@ -363,6 +365,8 @@ void CTicketView::updateTicketPrice(const int height)
         }
         ticketPrice = slotIndex > 1 ? ticketPrice : BaseTicketPrice;
         slotIndex = int(height / len);
+        if (slotIndex >= 5 && ticketPrice < BaseTicketPrice)
+            ticketPrice = BaseTicketPrice;
         LogPrint(BCLog::TICKET, "%s: updata ticket slot, index:%d, price:%d, prevSlotTicketCount:%d\n", __func__, slotIndex, ticketPrice, prevSlotTicketSize);
     }
 }
