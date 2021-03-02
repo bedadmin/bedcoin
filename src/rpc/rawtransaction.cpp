@@ -1817,10 +1817,10 @@ UniValue analyzepsbt(const JSONRPCRequest& request)
     return result;
 }
 
-CScript build_atomic_swap_contract(const CKeyID& refund, const CKeyID& redeem, const uint256& secret_hash, int64_t locktime) {
+CScript build_atomic_swap_contract(const CKeyID& refund, const CKeyID& redeem, const std::vector<unsigned char>& secret_hash, int64_t locktime) {
     return CScript()
         << OP_IF
-            << OP_HASH256 << ToByteVector(secret_hash) << OP_EQUALVERIFY
+            << OP_HASH256 << secret_hash << OP_EQUALVERIFY
             << OP_DUP << OP_HASH160 << ToByteVector(redeem)
         << OP_ELSE
             << CScriptNum(locktime) << OP_CHECKSEQUENCEVERIFY << OP_DROP
@@ -1839,11 +1839,7 @@ vop_codes extract_script(const CScript& script) {
         if (!script.GetOp(pc, opcode, vch)) {
             break;
         }
-        if (0 <= opcode && opcode <= OP_PUSHDATA4) {
-            res.emplace_back(opcode, vch);
-        } else {
-            res.emplace_back(opcode, {});
-        }
+        res.emplace_back(opcode, vch);
     }
     return res;
 }
@@ -1865,11 +1861,17 @@ UniValue initialte(const JSONRPCRequest& request)
                 "\ninitialte atomic swap.\n",
                 {
                     {"refund_addr", RPCArg::Type::STR, RPCArg::Optional::NO, "refund address"},
-                    {"redeem_addr", RPCArg::Type::STR, RPCArg::Optional::NO, "redeem address"},
+                    {"participant_addr", RPCArg::Type::STR, RPCArg::Optional::NO, "participant address"},
                 },
-                RPCResult{RPCResult::Type::OBJ_DYN, "", ""},
+                RPCResult
+                {
+                    RPCResult::Type::OBJ, "", "", 
+                    {
+                        {RPCResult::Type::STR, "", ""}
+                    }
+                },
                 RPCExamples{
-                    HelpExampleCli("initialte", "\"refund_addr\" \"redeem_addr\"")
+                    HelpExampleCli("initialte", "\"refund_addr\" \"participant_addr\"")
                 },
             }.Check(request);
 
@@ -1878,17 +1880,17 @@ UniValue initialte(const JSONRPCRequest& request)
     auto locktime = GetTime() + 48 * 3600;
     unsigned char secret[8];
     GetStrongRandBytes(secret, sizeof(secret));
-    uint256 secret_hash;
-    CHash256().Write(secret, sizeof(secret)).Finalize(secret_hash.begin());
+    std::vector<unsigned char> secret_hash(32);
+    CHash256().Write(secret, sizeof(secret)).Finalize(&secret_hash[0]);
 
     auto htlc = build_atomic_swap_contract(refund_addr, redeem_addr, secret_hash, locktime);
 
-    UniValue result;
+    UniValue result(UniValue::VOBJ);
     result.pushKV("locktime", locktime);
     result.pushKV("secret", HexStr(secret, secret+8));
     result.pushKV("secret_hash", HexStr(secret_hash));
-    result.pushKV("refund_addr", EncodeDestination(CTxDestination(PkHash(refund_addr))));
-    result.pushKV("participant", EncodeDestination(CTxDestination(PkHash(redeem_addr))));
+    result.pushKV("refund_addr", EncodeDestination(CTxDestination(PKHash(refund_addr))));
+    result.pushKV("participant", EncodeDestination(CTxDestination(PKHash(redeem_addr))));
     result.pushKV("contract_addr", EncodeDestination(CTxDestination(ScriptHash(htlc))));
     result.pushKV("contract_hex", HexStr(htlc.begin(), htlc.end()));
     result.pushKV("contract_asm", ScriptToAsmStr(htlc));
@@ -1901,27 +1903,33 @@ UniValue participate(const JSONRPCRequest& request)
                 "\nparticipate atomic swap.\n",
                 {
                     {"refund_addr", RPCArg::Type::STR, RPCArg::Optional::NO, "refund address"},
-                    {"redeem_addr", RPCArg::Type::STR, RPCArg::Optional::NO, "redeem address"},
-                    {"redeem_addr", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "redeem address"},
+                    {"initiator_addr", RPCArg::Type::STR, RPCArg::Optional::NO, "initiator address"},
+                    {"secret_hash", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "secret hash"},
                 },
-                RPCResult{RPCResult::Type::OBJ, "", ""},
+                RPCResult
+                {
+                    RPCResult::Type::OBJ, "", "", 
+                    {
+                        {RPCResult::Type::STR, "", ""}
+                    }
+                },
                 RPCExamples{
-                    HelpExampleCli("participate", "\"refund_addr\" \"redeem_addr\" \"secret_hash\"")
+                    HelpExampleCli("participate", "\"refund_addr\" \"initiator_addr\" \"secret_hash\"")
                 },
             }.Check(request);
 
     auto refund_addr = ensure_valid_address(request.params[0].get_str());
     auto redeem_addr = ensure_valid_address(request.params[1].get_str());
-    auto secret_hash = uint256S(request.params[2].get_str());
+    auto secret_hash = ParseHex(request.params[2].get_str());
     auto locktime = GetTime() + 24 * 3600;
 
     auto htlc = build_atomic_swap_contract(refund_addr, redeem_addr, secret_hash, locktime);
 
-    UniValue result;
+    UniValue result(UniValue::VOBJ);
     result.pushKV("locktime", locktime);
     result.pushKV("secret_hash", HexStr(secret_hash));
-    result.pushKV("refund_addr", EncodeDestination(CTxDestination(PkHash(refund_addr))));
-    result.pushKV("participant", EncodeDestination(CTxDestination(PkHash(redeem_addr))));
+    result.pushKV("refund_addr", EncodeDestination(CTxDestination(PKHash(refund_addr))));
+    result.pushKV("participant", EncodeDestination(CTxDestination(PKHash(redeem_addr))));
     result.pushKV("contract_addr", EncodeDestination(CTxDestination(ScriptHash(htlc))));
     result.pushKV("contract_hex", HexStr(htlc.begin(), htlc.end()));
     result.pushKV("contract_asm", ScriptToAsmStr(htlc));
@@ -1934,11 +1942,17 @@ UniValue validatecontract(const JSONRPCRequest& request)
                 "\nvalidate atomic swap script in transaction.\n",
                 {
                     {"script_hex", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "htlc script hex"},
-                    {"tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "htlc fund transaction hex"},
+                    {"fund_tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "htlc fund transaction hex"},
                 },
-                RPCResult{RPCResult::Type::OBJ_DYN, "", ""},
+                RPCResult
+                {
+                    RPCResult::Type::OBJ, "", "", 
+                    {
+                        {RPCResult::Type::STR, "", ""}
+                    }
+                },
                 RPCExamples{
-                    HelpExampleCli("validatecontract", "\"script_hex\" \"tx\"")
+                    HelpExampleCli("validatecontract", "\"script_hex\" \"fund_tx\"")
                 },
             }.Check(request);
             
@@ -1956,10 +1970,10 @@ UniValue validatecontract(const JSONRPCRequest& request)
 
     auto htlc_spk = GetScriptForDestination(CTxDestination(ScriptHash(htlc)));
     int iout{0};
-    for (; iout < mtx.vout.size(); ++i) {
-        CTxOut& out = mtx.vout[i];
+    for (; iout < mtx.vout.size(); ++iout) {
+        CTxOut& out = mtx.vout[iout];
         if (htlc_spk.size() == out.scriptPubKey.size()
-            && memcmp(htlc_spk.begin, out.scriptPubKey.begin(), htlc_spk.size()) == 0) {
+            && htlc_spk == out.scriptPubKey) {
                 break;
             }
     }
@@ -1967,11 +1981,11 @@ UniValue validatecontract(const JSONRPCRequest& request)
         throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "contract and tx mis-match");
     }
 
-    UniValue result;
-    result.pushKV("locktime", CScriptNum(vop_htlc[8].second).getint());
+    UniValue result(UniValue::VOBJ);
+    result.pushKV("locktime", CScriptNum(vop_htlc[8].second, false).getint());
     result.pushKV("secret_hash", HexStr(vop_htlc[2].second));
-    result.pushKV("refund_addr", EncodeDestination(CTxDestination(PkHash(CKeyID(vop_htlc[13].second)))));
-    result.pushKV("participant", EncodeDestination(CTxDestination(PkHash(CKeyID(vop_htlc[6].second))))));
+    result.pushKV("refund_addr", EncodeDestination(CTxDestination(PKHash(uint160(vop_htlc[13].second)))));
+    result.pushKV("participant", EncodeDestination(CTxDestination(PKHash(uint160(vop_htlc[6].second)))));
     result.pushKV("contract_addr", EncodeDestination(CTxDestination(ScriptHash(htlc))));
     result.pushKV("contract_hex", HexStr(htlc.begin(), htlc.end()));
     result.pushKV("contract_asm", ScriptToAsmStr(htlc));
@@ -1984,15 +1998,15 @@ UniValue extractsecret(const JSONRPCRequest& request)
                 "\nextract secret from redeem transaction.\n",
                 {
                     {"secret_hash", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "secret hash"},
-                    {"tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "redeem tx hex"},
+                    {"redeem_tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "redeem tx hex"},
                 },
-                RPCResult{RPCResult::Type::OBJ_DYN, "", ""},
+                RPCResult{RPCResult::Type::STR, "", ""},
                 RPCExamples{
-                    HelpExampleCli("extractsecret", "\"secret_hash\" \"tx\"")
+                    HelpExampleCli("extractsecret", "\"secret_hash\" \"redeem_tx\"")
                 },
             }.Check(request);
 
-    auto secret_hash = uint256S(request.params[0].get_str());
+    auto secret_hash = ParseHex(request.params[0].get_str());
     CMutableTransaction mtx;
     if (!DecodeHexTx(mtx, request.params[1].get_str())) {
         throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "TX decode failed");
@@ -2004,11 +2018,10 @@ UniValue extractsecret(const JSONRPCRequest& request)
         auto vop_ss = extract_script(vin.scriptSig);
         for (auto& v : vop_ss) {
             if (v.second.size() == 8) {
-                uint256 hash;
+                std::vector<unsigned char> hash(32);
                 auto& secret = v.second;
-                CHash256().Write(secret.begin(), secret.size()).Finalize(hash.begin());
-                if (hash.size() == secret_hash.size()
-                    && memcmp(hash.begin(), secret_hash.begin(), secret_hash.size()) == 0) {
+                CHash256().Write(&secret[0], secret.size()).Finalize(&hash[0]);
+                if (hash == secret_hash) {
                     return HexStr(secret);
                 }
             }
@@ -2018,12 +2031,12 @@ UniValue extractsecret(const JSONRPCRequest& request)
     return "not found";
 }
 
-CTransactionRef build_refund_tx(const CKey& prikey, const COutPoint& preout, const CKeyID& receiver, CAmount amount, const CScript& htlc) {
+CTransactionRef build_refund_tx(const CKey& prikey, const COutPoint& preout, const CKeyID& receiver, CAmount amount, uint32_t lkt, const CScript& htlc) {
     CMutableTransaction mtx;
 
     mtx.vin.push_back(CTxIn(preout, htlc, 0));
-    mtx.vout.push_back(CTxOut(out.nValue - 30000, GetScriptForDestination(CTxDestination(PKHash(receiver)))));
-    mtx.nLockTime = ::ChainActive().Height();
+    mtx.vout.push_back(CTxOut(amount - 30000, GetScriptForDestination(CTxDestination(PKHash(receiver)))));
+    mtx.nLockTime = lkt;
 
     CHashWriter ss(SER_GETHASH, 0);
     ss << mtx << 1;
@@ -2033,7 +2046,7 @@ CTransactionRef build_refund_tx(const CKey& prikey, const COutPoint& preout, con
         return MakeTransactionRef();
     }
     vchSig.push_back((unsigned char)SIGHASH_ALL);
-    mtx.vin[0].scriptSig = CScript() << vchSig << ToByteVector(prikey.GetPubKey()) << ToByteVector(htlc);
+    mtx.vin[0].scriptSig = CScript() << vchSig << ToByteVector(prikey.GetPubKey()) << OP_FALSE << ToByteVector(htlc);
 	CTransaction tx(mtx);
     return MakeTransactionRef(tx);
 }
@@ -2041,11 +2054,9 @@ CTransactionRef build_refund_tx(const CKey& prikey, const COutPoint& preout, con
 CTransactionRef build_redeem_tx(const CKey& prikey, const std::vector<unsigned char> secret, const COutPoint& preout, const CKeyID& receiver, CAmount amount, const CScript& htlc) {
     CMutableTransaction mtx;
 
-    CScript redeem_script;
-    redeem_script << ToByteVector(secret) << htlc;
-    mtx.vin.push_back(CTxIn(preout, redeem_script, 0));
-    mtx.vout.push_back(CTxOut(out.nValue - 30000, GetScriptForDestination(CTxDestination(PKHash(receiver)))));
-    mtx.nLockTime = ::ChainActive().Height();
+    mtx.vin.push_back(CTxIn(preout, htlc, 0));
+    mtx.vout.push_back(CTxOut(amount - 30000, GetScriptForDestination(CTxDestination(PKHash(receiver)))));
+    mtx.nLockTime = 0;
 
     CHashWriter ss(SER_GETHASH, 0);
     ss << mtx << 1;
@@ -2055,7 +2066,7 @@ CTransactionRef build_redeem_tx(const CKey& prikey, const std::vector<unsigned c
         return MakeTransactionRef();
     }
     vchSig.push_back((unsigned char)SIGHASH_ALL);
-    mtx.vin[0].scriptSig = CScript() << vchSig << ToByteVector(prikey.GetPubKey()) << ToByteVector(secret) << ToByteVector(htlc);
+    mtx.vin[0].scriptSig = CScript() << vchSig << ToByteVector(prikey.GetPubKey()) << ToByteVector(secret) << OP_TRUE << ToByteVector(htlc);
 	CTransaction tx(mtx);
     return MakeTransactionRef(tx);
 }
@@ -2080,10 +2091,10 @@ UniValue refund(const JSONRPCRequest& request)
 
     auto htlc_spk = GetScriptForDestination(CTxDestination(ScriptHash(htlc)));
     int iout{0};
-    for (; iout < mtx.vout.size(); ++i) {
-        CTxOut& out = mtx.vout[i];
+    for (; iout < mtx.vout.size(); ++iout) {
+        CTxOut& out = mtx.vout[iout];
         if (htlc_spk.size() == out.scriptPubKey.size()
-            && memcmp(htlc_spk.begin, out.scriptPubKey.begin(), htlc_spk.size()) == 0) {
+            && htlc_spk == out.scriptPubKey) {
                 break;
             }
     }
@@ -2091,7 +2102,7 @@ UniValue refund(const JSONRPCRequest& request)
         throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "contract and tx mis-match");
     }
     
-    auto tx = build_refund_tx(key, COutPoint(mtx.GetHash(), iout), CKeyID(vop_htlc[13].second), mtx.vout[iout].nValue, htlc);
+    auto tx = build_refund_tx(key, COutPoint(mtx.GetHash(), iout), CKeyID(uint160(vop_htlc[13].second)), mtx.vout[iout].nValue, CScriptNum(vop_htlc[8].second, false).getint(), htlc);
     if (!tx)
         return "failed";
     return EncodeHexTx(*tx);
@@ -2103,12 +2114,12 @@ UniValue refundbed(const JSONRPCRequest& request)
                 "\nrefund bed from bedcoin fund transaction after expired.\n",
                 {
                     {"script_hex", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "htlc script hex"},
-                    {"tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "bed fund tx hex"},
+                    {"fund_tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "bed fund tx hex"},
                     {"privkey", RPCArg::Type::STR, RPCArg::Optional::NO, "private key of refund"},
                 },
-                RPCResult{RPCResult::Type::OBJ_DYN, "", ""},
+                RPCResult{RPCResult::Type::STR, "", ""},
                 RPCExamples{
-                    HelpExampleCli("refundbed", "\"script_hex\" \"tx\" \"privkey\"")
+                    HelpExampleCli("refundbed", "\"script_hex\" \"fund_tx\" \"privkey\"")
                 },
             }.Check(request);
 
@@ -2121,12 +2132,12 @@ UniValue refundbtc(const JSONRPCRequest& request)
                 "\nrefund btc from bitcoin fund transaction after expired.\n",
                 {
                     {"script_hex", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "htlc script hex"},
-                    {"tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "btc fund tx hex"},
+                    {"fund_tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "btc fund tx hex"},
                     {"privkey", RPCArg::Type::STR, RPCArg::Optional::NO, "private key of refund"},
                 },
-                RPCResult{RPCResult::Type::OBJ_DYN, "", ""},
+                RPCResult{RPCResult::Type::STR, "", ""},
                 RPCExamples{
-                    HelpExampleCli("refundbed", "\"script_hex\" \"tx\" \"privkey\"")
+                    HelpExampleCli("refundbed", "\"script_hex\" \"fund_tx\" \"privkey\"")
                 },
             }.Check(request);
 
@@ -2142,7 +2153,7 @@ UniValue redeem(const JSONRPCRequest& request)
     if (!DecodeHexTx(mtx, request.params[1].get_str())) {
         throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "TX decode failed");
     }
-    auto vsecret = ParseHex(request.params[2].get_str())
+    auto vsecret = ParseHex(request.params[2].get_str());
     CKey key = DecodeSecret(request.params[3].get_str());
     if (!key.IsValid()) {
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key");
@@ -2154,10 +2165,10 @@ UniValue redeem(const JSONRPCRequest& request)
 
     auto htlc_spk = GetScriptForDestination(CTxDestination(ScriptHash(htlc)));
     int iout{0};
-    for (; iout < mtx.vout.size(); ++i) {
-        CTxOut& out = mtx.vout[i];
+    for (; iout < mtx.vout.size(); ++iout) {
+        CTxOut& out = mtx.vout[iout];
         if (htlc_spk.size() == out.scriptPubKey.size()
-            && memcmp(htlc_spk.begin, out.scriptPubKey.begin(), htlc_spk.size()) == 0) {
+            && htlc_spk == out.scriptPubKey) {
                 break;
             }
     }
@@ -2165,7 +2176,7 @@ UniValue redeem(const JSONRPCRequest& request)
         throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "contract and tx mis-match");
     }
     
-    auto tx = build_redeem_tx(key, vsecret, COutPoint(mtx.GetHash(), iout), CKeyID(vop_htlc[6].second), mtx.vout[iout].nValue, htlc);
+    auto tx = build_redeem_tx(key, vsecret, COutPoint(mtx.GetHash(), iout), CKeyID(uint160(vop_htlc[6].second)), mtx.vout[iout].nValue, htlc);
     if (!tx)
         return "failed";
     return EncodeHexTx(*tx);
@@ -2177,13 +2188,13 @@ UniValue redeembed(const JSONRPCRequest& request)
                 "\nredeem bed from bedcoin fund transaction.\n",
                 {
                     {"script_hex", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "htlc script hex"},
-                    {"tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "bed fund tx hex"},
+                    {"fund_tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "bed fund tx hex"},
                     {"secret", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "secret"},
                     {"privkey", RPCArg::Type::STR, RPCArg::Optional::NO, "private key of redeem"},
                 },
-                RPCResult{RPCResult::Type::OBJ_DYN, "", ""},
+                RPCResult{RPCResult::Type::STR, "", ""},
                 RPCExamples{
-                    HelpExampleCli("redeembed", "\"script_hex\" \"tx\" \"secret\" \"privkey\"")
+                    HelpExampleCli("redeembed", "\"script_hex\" \"fund_tx\" \"secret\" \"privkey\"")
                 },
             }.Check(request);
 
@@ -2196,13 +2207,13 @@ UniValue redeembtc(const JSONRPCRequest& request)
                 "\nredeem btc from bitcoin fund transaction.\n",
                 {
                     {"script_hex", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "htlc script hex"},
-                    {"tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "btc fund tx hex"},
+                    {"fund_tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "btc fund tx hex"},
                     {"secret", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "secret"},
                     {"privkey", RPCArg::Type::STR, RPCArg::Optional::NO, "private key of redeem"},
                 },
-                RPCResult{RPCResult::Type::OBJ_DYN, "", ""},
+                RPCResult{RPCResult::Type::STR, "", ""},
                 RPCExamples{
-                    HelpExampleCli("redeembed", "\"script_hex\" \"tx\" \"secret\" \"privkey\"")
+                    HelpExampleCli("redeembed", "\"script_hex\" \"fund_tx\" \"secret\" \"privkey\"")
                 },
             }.Check(request);
 
