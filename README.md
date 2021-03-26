@@ -1,7 +1,7 @@
-Bitcoin Core integration/staging tree
+Bedcoin Core integration/staging tree
 =====================================
 
-https://bitcoincore.org
+https://bedcoin.cc
 
 What is BedCoin?
 ----------------
@@ -13,21 +13,21 @@ out collectively by the network. Bitcoin Core is the name of open source
 software which enables the use of this currency.
 
 For more information, as well as an immediately usable, binary version of
-the Bitcoin Core software, see https://bitcoincore.org/en/download/, or read the
-[original whitepaper](https://bitcoincore.org/bitcoin.pdf).
+the Bitcoin Core software, see https://www.bedcoin.cc/download.html, or read the
+[original whitepaper](https://www.bedcoin.cc/dow/BED.pdf).
 
 License
 -------
 
-Bitcoin Core is released under the terms of the MIT license. See [COPYING](COPYING) for more
+Bedcoin Core is released under the terms of the MIT license. See [COPYING](COPYING) for more
 information or see https://opensource.org/licenses/MIT.
 
 Development Process
 -------------------
 
 The `master` branch is regularly built and tested, but is not guaranteed to be
-completely stable. [Tags](https://github.com/bitcoin/bitcoin/tags) are created
-regularly to indicate new official, stable release versions of Bitcoin Core.
+completely stable. [Tags](https://github.com/bedadmin/bedcoin/tags) are created
+regularly to indicate new official, stable release versions of Bedcoin Core.
 
 The contribution workflow is described in [CONTRIBUTING.md](CONTRIBUTING.md)
 and useful hints for developers can be found in [doc/developer-notes.md](doc/developer-notes.md).
@@ -60,16 +60,3 @@ code. This is especially important for large or high-risk changes. It is useful
 to add a test plan to the pull request description if testing the changes is
 not straightforward.
 
-Translations
-------------
-
-Changes to translations as well as new translations can be submitted to
-[Bitcoin Core's Transifex page](https://www.transifex.com/bitcoin/bitcoin/).
-
-Translations are periodically pulled from Transifex and merged into the git repository. See the
-[translation process](doc/translation_process.md) for details on how this works.
-
-**Important**: We do not accept translation changes as GitHub pull requests because the next
-pull from Transifex would automatically overwrite them again.
-
-Translators should also subscribe to the [mailing list](https://groups.google.com/forum/#!forum/bitcoin-translators).
