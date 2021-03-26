@@ -6,11 +6,12 @@ https://bedcoin.cc
 What is BedCoin?
 ----------------
 
-Bitcoin is an experimental digital currency that enables instant payments to
-anyone, anywhere in the world. Bitcoin uses peer-to-peer technology to operate
-with no central authority: managing transactions and issuing money are carried
-out collectively by the network. Bitcoin Core is the name of open source
-software which enables the use of this currency.
+We propose Bit Ecological Digital Asset ("BED"), which uses a hybrid
+consensus algorithm of Proof of Work (PoW) and Proof of Stake (PoS) to ensure the
+security and fairness of the blockchain network, At the same time, anonymity
+technology development and off-chain transaction system development have been
+added to protect user transaction privacy and meet large-scale commercial
+micropayment needs.
 
 For more information, as well as an immediately usable, binary version of
 the Bitcoin Core software, see https://www.bedcoin.cc/download.html, or read the
