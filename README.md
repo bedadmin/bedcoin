@@ -1,7 +1,7 @@
 Bedcoin Core integration/staging tree
 =====================================
 
-https://bedcoin.cc
+https://www.bedcoin.cc
 
 What is BedCoin?
 ----------------
