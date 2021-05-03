@@ -1823,7 +1823,7 @@ CScript build_atomic_swap_contract(const CKeyID& refund, const CKeyID& redeem, c
             << OP_HASH256 << secret_hash << OP_EQUALVERIFY
             << OP_DUP << OP_HASH160 << ToByteVector(redeem)
         << OP_ELSE
-            << CScriptNum(locktime) << OP_CHECKSEQUENCEVERIFY << OP_DROP
+            << CScriptNum(locktime) << OP_CHECKLOCKTIMEVERIFY << OP_DROP
             << OP_DUP << OP_HASH160 << ToByteVector(refund)
         << OP_ENDIF
         << OP_EQUALVERIFY << OP_CHECKSIG;
