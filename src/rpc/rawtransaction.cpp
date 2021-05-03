@@ -1860,8 +1860,8 @@ UniValue initialte(const JSONRPCRequest& request)
     RPCHelpMan{"initialte",
                 "\ninitialte atomic swap.\n",
                 {
-                    {"refund_addr", RPCArg::Type::STR, RPCArg::Optional::NO, "refund address"},
-                    {"participant_addr", RPCArg::Type::STR, RPCArg::Optional::NO, "participant address"},
+                    {"refund_addr", RPCArg::Type::STR, RPCArg::Optional::NO, "initiator refund address"},
+                    {"participant_addr", RPCArg::Type::STR, RPCArg::Optional::NO, "participant redeem address"},
                 },
                 RPCResult
                 {
@@ -1889,7 +1889,7 @@ UniValue initialte(const JSONRPCRequest& request)
     result.pushKV("locktime", locktime);
     result.pushKV("secret", HexStr(secret, secret+8));
     result.pushKV("secret_hash", HexStr(secret_hash));
-    result.pushKV("refund_addr", EncodeDestination(CTxDestination(PKHash(refund_addr))));
+    result.pushKV("initiator", EncodeDestination(CTxDestination(PKHash(refund_addr))));
     result.pushKV("participant", EncodeDestination(CTxDestination(PKHash(redeem_addr))));
     result.pushKV("contract_addr", EncodeDestination(CTxDestination(ScriptHash(htlc))));
     result.pushKV("contract_hex", HexStr(htlc.begin(), htlc.end()));
@@ -1902,8 +1902,8 @@ UniValue participate(const JSONRPCRequest& request)
     RPCHelpMan{"participate",
                 "\nparticipate atomic swap.\n",
                 {
-                    {"refund_addr", RPCArg::Type::STR, RPCArg::Optional::NO, "refund address"},
-                    {"initiator_addr", RPCArg::Type::STR, RPCArg::Optional::NO, "initiator address"},
+                    {"refund_addr", RPCArg::Type::STR, RPCArg::Optional::NO, "participant refund address"},
+                    {"initiator", RPCArg::Type::STR, RPCArg::Optional::NO, "initiator redeem address"},
                     {"secret_hash", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "secret hash"},
                 },
                 RPCResult
@@ -1928,8 +1928,8 @@ UniValue participate(const JSONRPCRequest& request)
     UniValue result(UniValue::VOBJ);
     result.pushKV("locktime", locktime);
     result.pushKV("secret_hash", HexStr(secret_hash));
-    result.pushKV("refund_addr", EncodeDestination(CTxDestination(PKHash(refund_addr))));
-    result.pushKV("participant", EncodeDestination(CTxDestination(PKHash(redeem_addr))));
+    result.pushKV("participant", EncodeDestination(CTxDestination(PKHash(refund_addr))));
+    result.pushKV("initiator", EncodeDestination(CTxDestination(PKHash(redeem_addr))));
     result.pushKV("contract_addr", EncodeDestination(CTxDestination(ScriptHash(htlc))));
     result.pushKV("contract_hex", HexStr(htlc.begin(), htlc.end()));
     result.pushKV("contract_asm", ScriptToAsmStr(htlc));
@@ -1998,7 +1998,7 @@ UniValue extractsecret(const JSONRPCRequest& request)
                 "\nextract secret from redeem transaction.\n",
                 {
                     {"secret_hash", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "secret hash"},
-                    {"redeem_tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "redeem tx hex"},
+                    {"redeem_tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "initiator redeem tx hex"},
                 },
                 RPCResult{RPCResult::Type::STR, "", ""},
                 RPCExamples{
@@ -2113,9 +2113,9 @@ UniValue refundbed(const JSONRPCRequest& request)
     RPCHelpMan{"refundbed",
                 "\nrefund bed from bedcoin fund transaction after expired.\n",
                 {
-                    {"script_hex", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "htlc script hex"},
-                    {"fund_tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "bed fund tx hex"},
-                    {"privkey", RPCArg::Type::STR, RPCArg::Optional::NO, "private key of refund"},
+                    {"script_hex", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "initiator htlc script hex"},
+                    {"fund_tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "initiator bed fund tx hex"},
+                    {"privkey", RPCArg::Type::STR, RPCArg::Optional::NO, "initiator private key of refund address"},
                 },
                 RPCResult{RPCResult::Type::STR, "", ""},
                 RPCExamples{
@@ -2131,9 +2131,9 @@ UniValue refundbtc(const JSONRPCRequest& request)
     RPCHelpMan{"refundbtc",
                 "\nrefund btc from bitcoin fund transaction after expired.\n",
                 {
-                    {"script_hex", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "htlc script hex"},
-                    {"fund_tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "btc fund tx hex"},
-                    {"privkey", RPCArg::Type::STR, RPCArg::Optional::NO, "private key of refund"},
+                    {"script_hex", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "participant htlc script hex"},
+                    {"fund_tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "participant btc fund tx hex"},
+                    {"privkey", RPCArg::Type::STR, RPCArg::Optional::NO, "participant private key of refund address"},
                 },
                 RPCResult{RPCResult::Type::STR, "", ""},
                 RPCExamples{
@@ -2187,10 +2187,10 @@ UniValue redeembed(const JSONRPCRequest& request)
     RPCHelpMan{"redeembed",
                 "\nredeem bed from bedcoin fund transaction.\n",
                 {
-                    {"script_hex", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "htlc script hex"},
-                    {"fund_tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "bed fund tx hex"},
+                    {"script_hex", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "participant htlc script hex"},
+                    {"fund_tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "participant bed fund tx hex"},
                     {"secret", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "secret"},
-                    {"privkey", RPCArg::Type::STR, RPCArg::Optional::NO, "private key of redeem"},
+                    {"privkey", RPCArg::Type::STR, RPCArg::Optional::NO, "initiator private key of redeem address"},
                 },
                 RPCResult{RPCResult::Type::STR, "", ""},
                 RPCExamples{
@@ -2206,10 +2206,10 @@ UniValue redeembtc(const JSONRPCRequest& request)
     RPCHelpMan{"redeembtc",
                 "\nredeem btc from bitcoin fund transaction.\n",
                 {
-                    {"script_hex", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "htlc script hex"},
-                    {"fund_tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "btc fund tx hex"},
+                    {"script_hex", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "initiator htlc script hex"},
+                    {"fund_tx", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "initiator btc fund tx hex"},
                     {"secret", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "secret"},
-                    {"privkey", RPCArg::Type::STR, RPCArg::Optional::NO, "private key of redeem"},
+                    {"privkey", RPCArg::Type::STR, RPCArg::Optional::NO, "participant private key of redeem address"},
                 },
                 RPCResult{RPCResult::Type::STR, "", ""},
                 RPCExamples{
