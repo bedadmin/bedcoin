@@ -19,6 +19,8 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
         nProofOfWorkLimit = 0x1a03c1b7;
     if (pindexLast->nHeight >= 23291 && pindexLast->nHeight < 23500)
         return nProofOfWorkLimit;
+    if (pindexLast->nHeight >= 24192 && pindexLast->nHeight < 24500)
+        return nProofOfWorkLimit;
         
     // Only change once per difficulty adjustment interval
     if ((pindexLast->nHeight+1) % params.DifficultyAdjustmentInterval() != 0)
@@ -75,7 +77,7 @@ unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nF
     bnNew *= nActualTimespan;
     bnNew /= params.nPowTargetTimespan;
 
-    if (bnNew > bnPowLimit)
+    if (pindexLast->nHeight < 24192 && bnNew > bnPowLimit)
         bnNew = bnPowLimit;
 
     return bnNew.GetCompact();
